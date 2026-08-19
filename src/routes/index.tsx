@@ -1,24 +1,28 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
 export const Route = createFileRoute("/")({
-  component: Index,
+  ssr: false,
+  beforeLoad: async () => {
+    const { supabase } = await import("@/integrations/supabase/client");
+    const { data } = await supabase.auth.getUser();
+    throw redirect({ to: data.user ? "/dashboard" : "/auth" });
+  },
+  head: () => ({
+    meta: [
+      { title: "NexusCRM · Client pipeline & multi-channel outreach" },
+      {
+        name: "description",
+        content:
+          "NexusCRM keeps clients, proposal status and every email, WhatsApp, SMS and call in one workspace.",
+      },
+      { property: "og:title", content: "NexusCRM · Client pipeline & outreach" },
+      {
+        property: "og:description",
+        content: "Track proposals and reach clients by email, WhatsApp, SMS or phone.",
+      },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
+    ],
+  }),
+  component: () => null,
 });
-
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
-function Index() {
-  return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
-  );
-}
