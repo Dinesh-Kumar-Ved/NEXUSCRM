@@ -11,9 +11,9 @@
 
 export interface SendResult {
   ok: boolean;
-  providerMessageId?: string;
+  providerMessageId?: string | undefined;
   provider: string;
-  error?: string;
+  error?: string | undefined;
   status: string;
 }
 
