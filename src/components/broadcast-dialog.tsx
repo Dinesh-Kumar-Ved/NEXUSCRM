@@ -68,8 +68,11 @@ export function BroadcastDialog({
       }),
     onSuccess: (result) => {
       void queryClient.invalidateQueries();
-      toast.success(`Sent ${result.sent} of ${result.total}`, {
-        description: result.failed ? `${result.failed} failed or skipped` : undefined,
+      toast.success(`Sent ${result.sent} of ${clientIds.length}`, {
+        description:
+          result.failed || result.skipped.length
+            ? `${result.failed} failed, ${result.skipped.length} skipped`
+            : undefined,
       });
       onOpenChange(false);
     },
@@ -82,7 +85,7 @@ export function BroadcastDialog({
         <DialogHeader>
           <DialogTitle>Broadcast to {clientIds.length} client(s)</DialogTitle>
           <DialogDescription>
-            Personalization tokens: {PERSONALIZATION_TOKENS.map((t) => t.token).join(", ")}
+            Personalization tokens: {PERSONALIZATION_TOKENS.join(", ")}
           </DialogDescription>
         </DialogHeader>
 
