@@ -244,8 +244,8 @@ export async function sendWhatsApp(params: { to: string; text: string }): Promis
 
 export async function placeCall(params: {
   to: string;
-  message?: string;
-  statusCallbackUrl?: string;
+  message?: string | undefined;
+  statusCallbackUrl?: string | undefined;
 }): Promise<SendResult> {
   const from = env("TWILIO_PHONE_NUMBER");
   if (!from) {
