@@ -39,6 +39,7 @@ export function BroadcastDialog({
   const [campaignName, setCampaignName] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("Hi {{client_name}},\n\n");
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>(undefined);
   const queryClient = useQueryClient();
   const send = useServerFn(sendBulkMessage);
 
@@ -64,6 +65,7 @@ export function BroadcastDialog({
           subject: channel === "email" ? subject : undefined,
           body,
           campaignName: campaignName.trim() || `${channel} broadcast`,
+          templateId: selectedTemplateId,
         },
       }),
     onSuccess: (result) => {
@@ -95,7 +97,10 @@ export function BroadcastDialog({
               <Label>Channel</Label>
               <Select
                 value={channel}
-                onValueChange={(v) => setChannel(v as Exclude<Channel, "call">)}
+                onValueChange={(v) => {
+                  setChannel(v as Exclude<Channel, "call">);
+                  setSelectedTemplateId(undefined);
+                }}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -121,9 +126,11 @@ export function BroadcastDialog({
             <div className="space-y-2">
               <Label>Start from a template</Label>
               <Select
+                value={selectedTemplateId ?? ""}
                 onValueChange={(id) => {
                   const template = (templates ?? []).find((t) => t.id === id);
                   if (!template) return;
+                  setSelectedTemplateId(template.id);
                   setSubject(template.subject ?? "");
                   setBody(template.body);
                 }}

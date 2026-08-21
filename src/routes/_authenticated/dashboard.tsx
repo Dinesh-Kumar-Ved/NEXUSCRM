@@ -200,15 +200,7 @@ function Metric({
   );
 }
 
-function StageRow({
-  status,
-  count,
-  total,
-}: {
-  status: DealStatus;
-  count: number;
-  total: number;
-}) {
+function StageRow({ status, count, total }: { status: DealStatus; count: number; total: number }) {
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-sm">

@@ -5,6 +5,18 @@
 //     React/TanStack dedupe, error logger plugins, and sandbox detection (port/host/strictPort).
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
+import { loadEnv } from "vite";
+
+// Load all environment variables from .env (and .env.local etc) into process.env at config time
+const env = loadEnv(process.env["NODE_ENV"] || "development", process.cwd(), "");
+for (const key in env) {
+  const val = env[key];
+  if (val && val.trim() !== "") {
+    if (process.env[key] === undefined || process.env[key] === "") {
+      process.env[key] = val;
+    }
+  }
+}
 
 export default defineConfig({
   tanstackStart: {
@@ -13,3 +25,4 @@ export default defineConfig({
     server: { entry: "server" },
   },
 });
+

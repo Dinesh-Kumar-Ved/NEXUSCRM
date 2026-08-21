@@ -12,9 +12,19 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedCampaignsRouteImport } from './routes/_authenticated/campaigns'
+import { Route as AuthenticatedClientsRouteImport } from './routes/_authenticated/clients'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedPipelineRouteImport } from './routes/_authenticated/pipeline'
+import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
+import { Route as AuthenticatedTasksRouteImport } from './routes/_authenticated/tasks'
+import { Route as AuthenticatedTemplatesRouteImport } from './routes/_authenticated/templates'
+import { Route as AuthenticatedClientsClientIdRouteImport } from './routes/_authenticated/clients.$clientId'
 import { Route as ApiPublicTwilioCallStatusRouteImport } from './routes/api/public/twilio/call-status'
 import { Route as ApiPublicTwilioInboundRouteImport } from './routes/api/public/twilio/inbound'
+import { Route as ApiIntegrationsGoogleOauthCallbackRouteImport } from './routes/api/integrations/google/oauth/callback'
+import { Route as ApiIntegrationsGoogleOauthDiagnosticRouteImport } from './routes/api/integrations/google/oauth/diagnostic'
+import { Route as ApiIntegrationsGoogleOauthUrlRouteImport } from './routes/api/integrations/google/oauth/url'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -30,11 +40,47 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedCampaignsRoute = AuthenticatedCampaignsRouteImport.update({
+  id: '/campaigns',
+  path: '/campaigns',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedClientsRoute = AuthenticatedClientsRouteImport.update({
+  id: '/clients',
+  path: '/clients',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedPipelineRoute = AuthenticatedPipelineRouteImport.update({
+  id: '/pipeline',
+  path: '/pipeline',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedTasksRoute = AuthenticatedTasksRouteImport.update({
+  id: '/tasks',
+  path: '/tasks',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedTemplatesRoute = AuthenticatedTemplatesRouteImport.update({
+  id: '/templates',
+  path: '/templates',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedClientsClientIdRoute =
+  AuthenticatedClientsClientIdRouteImport.update({
+    id: '/$clientId',
+    path: '/$clientId',
+    getParentRoute: () => AuthenticatedClientsRoute,
+  } as any)
 const ApiPublicTwilioCallStatusRoute =
   ApiPublicTwilioCallStatusRouteImport.update({
     id: '/api/public/twilio/call-status',
@@ -46,53 +92,131 @@ const ApiPublicTwilioInboundRoute = ApiPublicTwilioInboundRouteImport.update({
   path: '/api/public/twilio/inbound',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiIntegrationsGoogleOauthCallbackRoute =
+  ApiIntegrationsGoogleOauthCallbackRouteImport.update({
+    id: '/api/integrations/google/oauth/callback',
+    path: '/api/integrations/google/oauth/callback',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiIntegrationsGoogleOauthDiagnosticRoute =
+  ApiIntegrationsGoogleOauthDiagnosticRouteImport.update({
+    id: '/api/integrations/google/oauth/diagnostic',
+    path: '/api/integrations/google/oauth/diagnostic',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const ApiIntegrationsGoogleOauthUrlRoute =
+  ApiIntegrationsGoogleOauthUrlRouteImport.update({
+    id: '/api/integrations/google/oauth/url',
+    path: '/api/integrations/google/oauth/url',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/campaigns': typeof AuthenticatedCampaignsRoute
+  '/clients': typeof AuthenticatedClientsRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/pipeline': typeof AuthenticatedPipelineRoute
+  '/settings': typeof AuthenticatedSettingsRoute
+  '/tasks': typeof AuthenticatedTasksRoute
+  '/templates': typeof AuthenticatedTemplatesRoute
+  '/clients/$clientId': typeof AuthenticatedClientsClientIdRoute
   '/api/public/twilio/call-status': typeof ApiPublicTwilioCallStatusRoute
   '/api/public/twilio/inbound': typeof ApiPublicTwilioInboundRoute
+  '/api/integrations/google/oauth/callback': typeof ApiIntegrationsGoogleOauthCallbackRoute
+  '/api/integrations/google/oauth/diagnostic': typeof ApiIntegrationsGoogleOauthDiagnosticRoute
+  '/api/integrations/google/oauth/url': typeof ApiIntegrationsGoogleOauthUrlRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/campaigns': typeof AuthenticatedCampaignsRoute
+  '/clients': typeof AuthenticatedClientsRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
+  '/pipeline': typeof AuthenticatedPipelineRoute
+  '/settings': typeof AuthenticatedSettingsRoute
+  '/tasks': typeof AuthenticatedTasksRoute
+  '/templates': typeof AuthenticatedTemplatesRoute
+  '/clients/$clientId': typeof AuthenticatedClientsClientIdRoute
   '/api/public/twilio/call-status': typeof ApiPublicTwilioCallStatusRoute
   '/api/public/twilio/inbound': typeof ApiPublicTwilioInboundRoute
+  '/api/integrations/google/oauth/callback': typeof ApiIntegrationsGoogleOauthCallbackRoute
+  '/api/integrations/google/oauth/diagnostic': typeof ApiIntegrationsGoogleOauthDiagnosticRoute
+  '/api/integrations/google/oauth/url': typeof ApiIntegrationsGoogleOauthUrlRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_authenticated/campaigns': typeof AuthenticatedCampaignsRoute
+  '/_authenticated/clients': typeof AuthenticatedClientsRouteWithChildren
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
+  '/_authenticated/pipeline': typeof AuthenticatedPipelineRoute
+  '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/tasks': typeof AuthenticatedTasksRoute
+  '/_authenticated/templates': typeof AuthenticatedTemplatesRoute
+  '/_authenticated/clients/$clientId': typeof AuthenticatedClientsClientIdRoute
   '/api/public/twilio/call-status': typeof ApiPublicTwilioCallStatusRoute
   '/api/public/twilio/inbound': typeof ApiPublicTwilioInboundRoute
+  '/api/integrations/google/oauth/callback': typeof ApiIntegrationsGoogleOauthCallbackRoute
+  '/api/integrations/google/oauth/diagnostic': typeof ApiIntegrationsGoogleOauthDiagnosticRoute
+  '/api/integrations/google/oauth/url': typeof ApiIntegrationsGoogleOauthUrlRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/auth'
+    | '/campaigns'
+    | '/clients'
     | '/dashboard'
+    | '/pipeline'
+    | '/settings'
+    | '/tasks'
+    | '/templates'
+    | '/clients/$clientId'
     | '/api/public/twilio/call-status'
     | '/api/public/twilio/inbound'
+    | '/api/integrations/google/oauth/callback'
+    | '/api/integrations/google/oauth/diagnostic'
+    | '/api/integrations/google/oauth/url'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/auth'
+    | '/campaigns'
+    | '/clients'
     | '/dashboard'
+    | '/pipeline'
+    | '/settings'
+    | '/tasks'
+    | '/templates'
+    | '/clients/$clientId'
     | '/api/public/twilio/call-status'
     | '/api/public/twilio/inbound'
+    | '/api/integrations/google/oauth/callback'
+    | '/api/integrations/google/oauth/diagnostic'
+    | '/api/integrations/google/oauth/url'
   id:
     | '__root__'
     | '/'
     | '/_authenticated'
     | '/auth'
+    | '/_authenticated/campaigns'
+    | '/_authenticated/clients'
     | '/_authenticated/dashboard'
+    | '/_authenticated/pipeline'
+    | '/_authenticated/settings'
+    | '/_authenticated/tasks'
+    | '/_authenticated/templates'
+    | '/_authenticated/clients/$clientId'
     | '/api/public/twilio/call-status'
     | '/api/public/twilio/inbound'
+    | '/api/integrations/google/oauth/callback'
+    | '/api/integrations/google/oauth/diagnostic'
+    | '/api/integrations/google/oauth/url'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -101,6 +225,9 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRoute
   ApiPublicTwilioCallStatusRoute: typeof ApiPublicTwilioCallStatusRoute
   ApiPublicTwilioInboundRoute: typeof ApiPublicTwilioInboundRoute
+  ApiIntegrationsGoogleOauthCallbackRoute: typeof ApiIntegrationsGoogleOauthCallbackRoute
+  ApiIntegrationsGoogleOauthDiagnosticRoute: typeof ApiIntegrationsGoogleOauthDiagnosticRoute
+  ApiIntegrationsGoogleOauthUrlRoute: typeof ApiIntegrationsGoogleOauthUrlRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -126,12 +253,61 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/campaigns': {
+      id: '/_authenticated/campaigns'
+      path: '/campaigns'
+      fullPath: '/campaigns'
+      preLoaderRoute: typeof AuthenticatedCampaignsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/clients': {
+      id: '/_authenticated/clients'
+      path: '/clients'
+      fullPath: '/clients'
+      preLoaderRoute: typeof AuthenticatedClientsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/dashboard': {
       id: '/_authenticated/dashboard'
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/pipeline': {
+      id: '/_authenticated/pipeline'
+      path: '/pipeline'
+      fullPath: '/pipeline'
+      preLoaderRoute: typeof AuthenticatedPipelineRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/settings': {
+      id: '/_authenticated/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AuthenticatedSettingsRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/tasks': {
+      id: '/_authenticated/tasks'
+      path: '/tasks'
+      fullPath: '/tasks'
+      preLoaderRoute: typeof AuthenticatedTasksRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/templates': {
+      id: '/_authenticated/templates'
+      path: '/templates'
+      fullPath: '/templates'
+      preLoaderRoute: typeof AuthenticatedTemplatesRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/clients/$clientId': {
+      id: '/_authenticated/clients/$clientId'
+      path: '/$clientId'
+      fullPath: '/clients/$clientId'
+      preLoaderRoute: typeof AuthenticatedClientsClientIdRouteImport
+      parentRoute: typeof AuthenticatedClientsRoute
     }
     '/api/public/twilio/call-status': {
       id: '/api/public/twilio/call-status'
@@ -147,15 +323,59 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicTwilioInboundRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/integrations/google/oauth/callback': {
+      id: '/api/integrations/google/oauth/callback'
+      path: '/api/integrations/google/oauth/callback'
+      fullPath: '/api/integrations/google/oauth/callback'
+      preLoaderRoute: typeof ApiIntegrationsGoogleOauthCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/integrations/google/oauth/diagnostic': {
+      id: '/api/integrations/google/oauth/diagnostic'
+      path: '/api/integrations/google/oauth/diagnostic'
+      fullPath: '/api/integrations/google/oauth/diagnostic'
+      preLoaderRoute: typeof ApiIntegrationsGoogleOauthDiagnosticRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/integrations/google/oauth/url': {
+      id: '/api/integrations/google/oauth/url'
+      path: '/api/integrations/google/oauth/url'
+      fullPath: '/api/integrations/google/oauth/url'
+      preLoaderRoute: typeof ApiIntegrationsGoogleOauthUrlRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
+interface AuthenticatedClientsRouteChildren {
+  AuthenticatedClientsClientIdRoute: typeof AuthenticatedClientsClientIdRoute
+}
+
+const AuthenticatedClientsRouteChildren: AuthenticatedClientsRouteChildren = {
+  AuthenticatedClientsClientIdRoute: AuthenticatedClientsClientIdRoute,
+}
+
+const AuthenticatedClientsRouteWithChildren =
+  AuthenticatedClientsRoute._addFileChildren(AuthenticatedClientsRouteChildren)
+
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedCampaignsRoute: typeof AuthenticatedCampaignsRoute
+  AuthenticatedClientsRoute: typeof AuthenticatedClientsRouteWithChildren
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
+  AuthenticatedPipelineRoute: typeof AuthenticatedPipelineRoute
+  AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedTasksRoute: typeof AuthenticatedTasksRoute
+  AuthenticatedTemplatesRoute: typeof AuthenticatedTemplatesRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedCampaignsRoute: AuthenticatedCampaignsRoute,
+  AuthenticatedClientsRoute: AuthenticatedClientsRouteWithChildren,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
+  AuthenticatedPipelineRoute: AuthenticatedPipelineRoute,
+  AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedTasksRoute: AuthenticatedTasksRoute,
+  AuthenticatedTemplatesRoute: AuthenticatedTemplatesRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
@@ -167,6 +387,11 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRoute,
   ApiPublicTwilioCallStatusRoute: ApiPublicTwilioCallStatusRoute,
   ApiPublicTwilioInboundRoute: ApiPublicTwilioInboundRoute,
+  ApiIntegrationsGoogleOauthCallbackRoute:
+    ApiIntegrationsGoogleOauthCallbackRoute,
+  ApiIntegrationsGoogleOauthDiagnosticRoute:
+    ApiIntegrationsGoogleOauthDiagnosticRoute,
+  ApiIntegrationsGoogleOauthUrlRoute: ApiIntegrationsGoogleOauthUrlRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

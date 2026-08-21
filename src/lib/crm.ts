@@ -71,17 +71,20 @@ export interface ClientRecord {
   sms_opted_out: boolean;
   created_at: string;
   updated_at: string;
+  website: string | null;
+  workspace_id: string;
 }
 
 /** Replace {{tokens}} with client values for personalized messaging. */
-export function personalize(template: string, client: Partial<ClientRecord>): string {
+export function personalize(template: string | null | undefined, client: Partial<ClientRecord>): string {
+  if (!template || typeof template !== "string") return "";
   const map: Record<string, string> = {
     client_name: client.name ?? "there",
     first_name: (client.name ?? "there").split(" ")[0] ?? "there",
     company: client.company ?? "your company",
     email: client.email ?? "",
     phone: client.phone ?? "",
-    status: client.status ? STATUS_LABELS[client.status] : "",
+    status: client.status ? (STATUS_LABELS[client.status as DealStatus] || client.status) : "",
   };
   return template.replace(/\{\{\s*([a-zA-Z_]+)\s*\}\}/g, (full, key: string) =>
     key in map ? map[key]! : full,
@@ -96,9 +99,9 @@ export const PERSONALIZATION_TOKENS = [
 ];
 
 export function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("en-IN", {
     style: "currency",
-    currency: "USD",
+    currency: "INR",
     maximumFractionDigits: 0,
   }).format(value ?? 0);
 }

@@ -1,6 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { Loader2, Radar } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -8,7 +7,58 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable/index";
+
+type SupabaseErrorLike = {
+  message?: string | undefined;
+  code?: string | undefined;
+  details?: string | undefined;
+  hint?: string | undefined;
+  status?: number | undefined;
+};
+
+function getSupabaseErrorDetails(error: unknown): SupabaseErrorLike {
+  if (!error || typeof error !== "object") return { message: String(error) };
+  const candidate = error as Record<string, unknown>;
+  return {
+    message: typeof candidate["message"] === "string" ? candidate["message"] : undefined,
+    code: typeof candidate["code"] === "string" ? candidate["code"] : undefined,
+    details: typeof candidate["details"] === "string" ? candidate["details"] : undefined,
+    hint: typeof candidate["hint"] === "string" ? candidate["hint"] : undefined,
+    status: typeof candidate["status"] === "number" ? candidate["status"] : undefined,
+  };
+}
+
+function logAuthEvent(message: string, details?: Record<string, unknown>) {
+  if (import.meta.env.DEV) console.info(message, details ?? {});
+}
+
+function logAuthError(scope: string, error: unknown) {
+  const details = getSupabaseErrorDetails(error);
+  if (import.meta.env.DEV) console.error(`[${scope}] Supabase operation failed`, details);
+  return details.message || "Unable to create your account. Please try again.";
+}
+
+function getAuthErrorMessage(error: { message: string }, operation: "sign-in" | "sign-up") {
+  const message = error.message.toLowerCase();
+  if (message.includes("fetch") || message.includes("network") || message.includes("connect")) {
+    return "Unable to connect to the authentication service.";
+  }
+  if (message.includes("email not confirmed") || message.includes("confirm your email")) {
+    return "Please confirm your email before signing in.";
+  }
+  if (
+    operation === "sign-in" &&
+    (message.includes("invalid login credentials") || message.includes("user not found"))
+  ) {
+    return "Invalid email or password.";
+  }
+  if (operation === "sign-up" && message.includes("already registered")) {
+    return "An account with this email already exists.";
+  }
+  return operation === "sign-up"
+    ? "Unable to create your account. Please try again."
+    : "Unable to sign in. Please try again.";
+}
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
@@ -38,55 +88,115 @@ function AuthPage() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) void navigate({ to: "/dashboard" });
+    let mounted = true;
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (mounted && session) void navigate({ to: "/dashboard", replace: true });
     });
+    void supabase.auth.getSession().then(({ data: sessionData }) => {
+      if (mounted && sessionData.session) void navigate({ to: "/dashboard", replace: true });
+    });
+    return () => {
+      mounted = false;
+      data.subscription.unsubscribe();
+    };
   }, [navigate]);
+
+  const clearMessages = () => {
+    setAuthError(null);
+    setSuccessMessage(null);
+  };
+
+  const validateCredentials = () => {
+    const normalizedEmail = email.trim();
+    if (!normalizedEmail) return "Please enter your email address.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      return "Please enter a valid email address.";
+    }
+    if (!password) return "Please enter your password.";
+    if (password.length < 8) return "Password must be at least 8 characters.";
+    return null;
+  };
 
   const signIn = async (event: React.FormEvent) => {
     event.preventDefault();
-    setBusy(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setBusy(false);
-    if (error) {
-      toast.error(error.message);
+    clearMessages();
+    const validationError = validateCredentials();
+    if (validationError) {
+      setAuthError(validationError);
       return;
     }
-    void navigate({ to: "/dashboard" });
+    setBusy(true);
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+      if (error) {
+        setAuthError(getAuthErrorMessage(error, "sign-in"));
+        return;
+      }
+      void navigate({ to: "/dashboard", replace: true });
+    } catch (error) {
+      setAuthError(getAuthErrorMessage({ message: String(error) }, "sign-in"));
+    } finally {
+      setBusy(false);
+    }
   };
 
   const signUp = async (event: React.FormEvent) => {
     event.preventDefault();
+    clearMessages();
+    logAuthEvent("[AUTH] Starting signup", {
+      emailProvided: Boolean(email.trim()),
+      fullNameProvided: Boolean(fullName.trim()),
+    });
+    const validationError = validateCredentials();
+    if (validationError) {
+      logAuthEvent("[AUTH] Signup validation failed", { message: validationError });
+      setAuthError(validationError);
+      return;
+    }
+    if (!fullName.trim()) {
+      logAuthEvent("[AUTH] Signup validation failed", { message: "Please enter your full name." });
+      setAuthError("Please enter your full name.");
+      return;
+    }
     setBusy(true);
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: fullName },
-        emailRedirectTo: `${window.location.origin}/dashboard`,
-      },
-    });
-    setBusy(false);
-    if (error) {
-      toast.error(error.message);
-      return;
+    try {
+      logAuthEvent("[AUTH] Calling supabase.auth.signUp", {
+        emailProvided: true,
+        metadata: { fullNameProvided: true },
+      });
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password,
+        options: {
+          data: { full_name: fullName.trim() },
+          emailRedirectTo: `${window.location.origin}/auth`,
+        },
+      });
+      if (error) {
+        setAuthError(logAuthError("AUTH", error));
+        return;
+      }
+      logAuthEvent("[AUTH] Supabase signup successful", {
+        userCreated: Boolean(data.user),
+        sessionCreated: Boolean(data.session),
+        profileAndRoleProvisioning: "database trigger public.handle_new_user",
+      });
+      if (data.session) {
+        logAuthEvent("[AUTH] Session created; opening dashboard");
+        void navigate({ to: "/dashboard", replace: true });
+      } else {
+        logAuthEvent("[AUTH] Signup complete; email confirmation required");
+        setSuccessMessage("Account created. Please check your email to confirm your account.");
+      }
+    } catch (error) {
+      setAuthError(logAuthError("AUTH", error));
+    } finally {
+      setBusy(false);
     }
-    toast.success("Account created. You can sign in now.");
-    void navigate({ to: "/dashboard" });
-  };
-
-  const google = async () => {
-    const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
-    });
-    if (result.error) {
-      toast.error("Google sign-in failed. Please try again.");
-      return;
-    }
-    if (result.redirected) return;
-    void navigate({ to: "/dashboard" });
   };
 
   return (
@@ -101,8 +211,8 @@ function AuthPage() {
             Every client, every conversation, one pipeline.
           </h1>
           <p className="max-w-md text-sm text-sidebar-foreground/70">
-            Track proposals from first touch to signed deal, and reach clients over email,
-            WhatsApp, SMS or a phone call without leaving the record.
+            Track proposals from first touch to signed deal, and reach clients over email, WhatsApp,
+            SMS or a phone call without leaving the record.
           </p>
         </div>
         <p className="text-xs text-sidebar-foreground/50">
@@ -193,13 +303,29 @@ function AuthPage() {
             </TabsContent>
           </Tabs>
 
+          {authError ? (
+            <p role="alert" className="mt-4 text-sm text-destructive">
+              {authError}
+            </p>
+          ) : null}
+          {successMessage ? (
+            <p role="status" className="mt-4 text-sm text-success">
+              {successMessage}
+            </p>
+          ) : null}
+
           <div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
             <span className="h-px flex-1 bg-border" />
             or
             <span className="h-px flex-1 bg-border" />
           </div>
-          <Button variant="outline" className="w-full" onClick={google}>
-            Continue with Google
+          <Button
+            variant="outline"
+            className="w-full"
+            disabled
+            title="Google sign-in is unavailable until OAuth is configured"
+          >
+            Continue with Google (unavailable)
           </Button>
         </div>
       </section>

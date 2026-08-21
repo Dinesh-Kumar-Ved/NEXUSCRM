@@ -41,15 +41,44 @@ export function useProfile(user: User | null) {
 }
 
 export function useTeam() {
+  return useTeamForWorkspace(null);
+}
+
+export function useTeamForWorkspace(workspaceId: string | null) {
   return useQuery({
-    queryKey: ["team"],
+    queryKey: ["team", workspaceId],
+    enabled: Boolean(workspaceId),
     queryFn: async () => {
+      const { data: memberships, error: membershipError } = await supabase
+        .from("workspace_members")
+        .select("user_id")
+        .eq("workspace_id", workspaceId!);
+      if (membershipError) throw membershipError;
+      const userIds = (memberships ?? []).map((membership) => membership.user_id);
+      if (userIds.length === 0) return [];
       const { data, error } = await supabase
         .from("profiles")
         .select("id, full_name, email")
+        .in("id", userIds)
         .order("full_name");
       if (error) throw error;
       return data ?? [];
+    },
+  });
+}
+
+export function useWorkspace(userId: string | undefined) {
+  return useQuery({
+    queryKey: ["workspace", userId],
+    enabled: Boolean(userId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("workspace_members")
+        .select("workspace_id, role")
+        .eq("user_id", userId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data;
     },
   });
 }

@@ -10,8 +10,10 @@ import {
   Settings,
   Users,
   FileText,
+  Loader2,
 } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -62,10 +64,18 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { data } = useProfile(user);
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    void navigate({ to: "/auth" });
+    if (signingOut) return;
+    setSigningOut(true);
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      setSigningOut(false);
+      toast.error("Unable to sign out. Please try again.");
+      return;
+    }
+    void navigate({ to: "/auth", replace: true });
   };
 
   const name = data?.profile?.full_name || user?.email || "Team member";
@@ -95,9 +105,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           variant="ghost"
           size="sm"
           onClick={signOut}
+          disabled={signingOut}
           className="w-full justify-start text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
         >
-          <LogOut className="mr-2 size-4" /> Sign out
+          {signingOut ? (
+            <Loader2 className="mr-2 size-4 animate-spin" />
+          ) : (
+            <LogOut className="mr-2 size-4" />
+          )}
+          {signingOut ? "Signing out..." : "Sign out"}
         </Button>
       </div>
     </div>

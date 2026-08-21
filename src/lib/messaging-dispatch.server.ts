@@ -4,6 +4,7 @@ import { getRequestUrl } from "@tanstack/react-start/server";
 import type { Database } from "@/integrations/supabase/types";
 import { personalize, type ClientRecord } from "./crm";
 import { placeCall, sendEmail, sendSms, sendWhatsApp, type SendResult } from "./messaging.server";
+import type { EmailAttachment } from "./google-auth.server";
 
 type Client = SupabaseClient<Database>;
 type Channel = "email" | "sms" | "whatsapp";
@@ -31,11 +32,74 @@ async function loadClients(supabase: Client, ids: string[]): Promise<ClientRecor
 }
 
 async function deliver(
+  supabase: Client,
+  workspaceId: string | null | undefined,
   channel: Channel,
   to: string,
   subject: string,
   text: string,
+  options?: {
+    cc?: string[] | undefined;
+    bcc?: string[] | undefined;
+    html?: string | undefined;
+    attachments?: EmailAttachment[] | undefined;
+    threadId?: string | undefined;
+    inReplyTo?: string | undefined;
+    references?: string | undefined;
+  },
 ): Promise<SendResult> {
+  if (workspaceId) {
+    const { getWorkspaceIntegrationConfig, sendMetaWhatsAppMessage, sendEmailWithConfig } =
+      await import("./integrations.server");
+
+    if (channel === "whatsapp") {
+      const wa = await getWorkspaceIntegrationConfig(supabase, workspaceId, "whatsapp");
+      const waConfig = wa?.config as Record<string, any> | undefined;
+      if (waConfig && waConfig["phoneNumberId"] && waConfig["accessToken"]) {
+        const res = await sendMetaWhatsAppMessage({
+          phoneNumberId: String(waConfig["phoneNumberId"]),
+          accessToken: String(waConfig["accessToken"]),
+          to,
+          text,
+        });
+        return {
+          ok: res.ok,
+          provider: "meta_whatsapp",
+          status: res.ok ? "sent" : "failed",
+          providerMessageId: res.messageId,
+          error: res.error,
+        };
+      }
+    }
+
+    if (channel === "email") {
+      const em = await getWorkspaceIntegrationConfig(supabase, workspaceId, "email");
+      if (em?.config && (em.config as any).fromEmail) {
+        const res = await sendEmailWithConfig({
+          config: em.config as any,
+          to,
+          cc: options?.cc,
+          bcc: options?.bcc,
+          subject,
+          text,
+          html: options?.html,
+          attachments: options?.attachments,
+          threadId: options?.threadId,
+          inReplyTo: options?.inReplyTo,
+          references: options?.references,
+        });
+        return {
+          ok: res.ok,
+          provider: em.provider,
+          status: res.ok ? "sent" : "failed",
+          providerMessageId: res.messageId,
+          error: res.error,
+        };
+      }
+    }
+  }
+
+  // Fallback to default env vars
   if (channel === "email") return sendEmail({ to, subject, text });
   if (channel === "sms") return sendSms({ to, text });
   return sendWhatsApp({ to, text });
@@ -90,24 +154,56 @@ export async function deliverToClient(
   args: BaseArgs & {
     clientId: string;
     channel: Channel;
+    to?: string | undefined;
+    cc?: string[] | undefined;
+    bcc?: string[] | undefined;
     subject?: string | undefined;
     body: string;
+    html?: string | undefined;
+    attachments?: EmailAttachment[] | undefined;
+    threadId?: string | undefined;
+    inReplyTo?: string | undefined;
+    references?: string | undefined;
   },
 ) {
   const [client] = await loadClients(args.supabase, [args.clientId]);
   if (!client) throw new Error("Client not found");
 
-  const to = recipientFor(client, args.channel);
+  const to = args.to?.trim() || recipientFor(client, args.channel);
   if (!to) {
     return { ok: false, error: `This client has no ${args.channel} contact details.` };
   }
   if (optedOut(client, args.channel)) {
     return { ok: false, error: "This client has opted out of this channel." };
   }
+  if (args.channel === "email" && (!to.includes("@") || !to.includes("."))) {
+    return { ok: false, error: `Invalid recipient email address: "${to}"` };
+  }
 
   const body = personalize(args.body, client);
   const subject = personalize(args.subject ?? "", client);
-  const result = await deliver(args.channel, to, subject || "Message from your account team", body);
+
+  console.log(
+    `[DIRECT_DISPATCH] Client: ${client.id} | Channel: ${args.channel} | To: ${to} | Subject: "${subject || "Message from your account team"}" | Attachments: ${args.attachments?.length ?? 0}`,
+  );
+
+  const result = await deliver(
+    args.supabase,
+    client.workspace_id,
+    args.channel,
+    to,
+    subject || "Message from your account team",
+    body,
+    {
+      cc: args.cc,
+      bcc: args.bcc,
+      html: args.html ? personalize(args.html, client) : undefined,
+      attachments: args.attachments,
+      threadId: args.threadId,
+      inReplyTo: args.inReplyTo,
+      references: args.references,
+    },
+  );
 
   await recordMessage({
     supabase: args.supabase,
@@ -120,7 +216,12 @@ export async function deliverToClient(
     result,
   });
 
-  return { ok: result.ok, error: result.error ?? null, status: result.status };
+  return {
+    ok: result.ok,
+    error: result.error ?? null,
+    status: result.status,
+    providerMessageId: result.providerMessageId,
+  };
 }
 
 export async function runCampaign(
@@ -130,6 +231,7 @@ export async function runCampaign(
     subject?: string | undefined;
     body: string;
     campaignName: string;
+    templateId?: string | undefined;
   },
 ) {
   const clients = await loadClients(args.supabase, args.clientIds);
@@ -152,18 +254,88 @@ export async function runCampaign(
   let sent = 0;
   let failed = 0;
   const skipped: string[] = [];
+  const source = args.templateId ? "template" : "custom";
 
   for (const client of clients) {
-    const to = recipientFor(client, args.channel);
-    if (!to || optedOut(client, args.channel)) {
-      skipped.push(client.name);
+    const rawTo = recipientFor(client, args.channel);
+    const to = rawTo?.trim();
+
+    if (!to) {
+      skipped.push(`${client.name} (no ${args.channel} address)`);
+      failed += 1;
+      await recordMessage({
+        supabase: args.supabase,
+        userId: args.userId,
+        clientId: client.id,
+        campaignId: campaign.id,
+        channel: args.channel,
+        subject: args.channel === "email" ? (args.subject ?? null) : null,
+        body: args.body,
+        to: "N/A",
+        result: {
+          ok: false,
+          status: "failed",
+          provider: "none",
+          error: `Client has no ${args.channel} contact address.`,
+        },
+      });
       continue;
     }
+
+    if (optedOut(client, args.channel)) {
+      skipped.push(`${client.name} (opted out)`);
+      continue;
+    }
+
+    if (args.channel === "email" && (!to.includes("@") || !to.includes("."))) {
+      skipped.push(`${client.name} (invalid email: ${to})`);
+      failed += 1;
+      await recordMessage({
+        supabase: args.supabase,
+        userId: args.userId,
+        clientId: client.id,
+        campaignId: campaign.id,
+        channel: args.channel,
+        subject: args.channel === "email" ? (args.subject ?? null) : null,
+        body: args.body,
+        to,
+        result: {
+          ok: false,
+          status: "failed",
+          provider: "none",
+          error: `Invalid recipient email address: "${to}"`,
+        },
+      });
+      continue;
+    }
+
     const body = personalize(args.body, client);
     const subject = personalize(args.subject ?? "", client);
-    const result = await deliver(args.channel, to, subject || "Update from your account team", body);
-    if (result.ok) sent += 1;
-    else failed += 1;
+
+    console.log(
+      `[BROADCAST_DISPATCH] Starting send | source=${source} | Campaign: ${campaign.id} | Client: ${client.id} | Recipient: ${to} | Subject: "${subject || "Update from your account team"}" | messageLength=${body.length}`,
+    );
+
+    const result = await deliver(
+      args.supabase,
+      client.workspace_id,
+      args.channel,
+      to,
+      subject || "Update from your account team",
+      body,
+    );
+
+    if (result.ok) {
+      sent += 1;
+      console.log(
+        `[BROADCAST_DISPATCH] Delivered | source=${source} | Campaign: ${campaign.id} | Client: ${client.id} | Recipient: ${to} | Provider: ${result.provider} | provider_message_id=${result.providerMessageId || "N/A"}`,
+      );
+    } else {
+      failed += 1;
+      console.error(
+        `[BROADCAST_DISPATCH] Failed | source=${source} | Campaign: ${campaign.id} | Client: ${client.id} | Recipient: ${to} | Error: ${result.error}`,
+      );
+    }
 
     await recordMessage({
       supabase: args.supabase,
@@ -178,13 +350,20 @@ export async function runCampaign(
     });
   }
 
+  const finalStatus =
+    sent === 0 && failed > 0
+      ? "failed"
+      : failed > 0 || skipped.length > 0
+        ? "partially_failed"
+        : "completed";
+
   await args.supabase
     .from("campaigns")
     .update({
       sent_count: sent,
       failed_count: failed,
-      recipient_count: clients.length - skipped.length,
-      status: "completed",
+      recipient_count: clients.length,
+      status: finalStatus,
     })
     .eq("id", campaign.id);
 

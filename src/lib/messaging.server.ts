@@ -40,21 +40,36 @@ export function getProviderStatus(): ProviderStatus {
     ? "resend"
     : env("SENDGRID_API_KEY")
       ? "sendgrid"
-      : null;
+      : env("EMAIL_HOST")
+        ? "smtp"
+        : null;
   const from = env("EMAIL_FROM") ?? null;
   const twilio = twilioMode();
   const smsNumber = env("TWILIO_PHONE_NUMBER") ?? null;
-  const waNumber = env("TWILIO_WHATSAPP_NUMBER") ?? null;
+  const metaWaToken = env("WHATSAPP_ACCESS_TOKEN");
+  const metaWaPhoneId = env("WHATSAPP_PHONE_NUMBER_ID");
+  const waNumber = metaWaPhoneId
+    ? `Meta ID: ${metaWaPhoneId}`
+    : (env("TWILIO_WHATSAPP_NUMBER") ?? null);
+  const waProvider = metaWaToken && metaWaPhoneId ? "meta_whatsapp" : twilio ? "twilio" : null;
 
   return {
     email: { configured: Boolean(emailProvider && from), provider: emailProvider, from },
-    sms: { configured: Boolean(twilio && smsNumber), provider: twilio ? "twilio" : null, from: smsNumber },
-    whatsapp: {
-      configured: Boolean(twilio && waNumber),
+    sms: {
+      configured: Boolean(twilio && smsNumber),
       provider: twilio ? "twilio" : null,
+      from: smsNumber,
+    },
+    whatsapp: {
+      configured: Boolean(waProvider && waNumber),
+      provider: waProvider,
       from: waNumber,
     },
-    voice: { configured: Boolean(twilio && smsNumber), provider: twilio ? "twilio" : null, from: smsNumber },
+    voice: {
+      configured: Boolean(twilio && smsNumber),
+      provider: twilio ? "twilio" : null,
+      from: smsNumber,
+    },
   };
 }
 
@@ -68,60 +83,75 @@ export async function sendEmail(params: {
   const from = env("EMAIL_FROM");
   const resendKey = env("RESEND_API_KEY");
   const sendgridKey = env("SENDGRID_API_KEY");
+  const smtpHost = env("EMAIL_HOST");
 
-  if (!from) {
-    return { ok: false, provider: "none", status: "failed", error: "EMAIL_FROM is not configured" };
-  }
-
-  const html = `<div style="font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:1.6;color:#1f2937;white-space:pre-wrap">${escapeHtml(
-    params.text,
-  )}</div>`;
-
-  if (resendKey) {
-    const response = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from, to: [params.to], subject: params.subject, html, text: params.text }),
+  if (resendKey && from) {
+    const { sendEmailWithConfig } = await import("./integrations.server");
+    const res = await sendEmailWithConfig({
+      config: {
+        provider: "resend",
+        resendApiKey: resendKey,
+        fromEmail: from,
+        fromName: env("EMAIL_FROM_NAME"),
+      },
+      to: params.to,
+      subject: params.subject,
+      text: params.text,
     });
-    const body = await response.text();
-    if (!response.ok) {
-      console.error(`Resend send failed [${response.status}]: ${body}`);
-      return { ok: false, provider: "resend", status: "failed", error: `${response.status}: ${body}` };
-    }
-    let id: string | undefined;
-    try {
-      id = (JSON.parse(body) as { id?: string }).id;
-    } catch {
-      id = undefined;
-    }
-    return { ok: true, provider: "resend", status: "sent", providerMessageId: id };
-  }
-
-  if (sendgridKey) {
-    const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${sendgridKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        personalizations: [{ to: [{ email: params.to }] }],
-        from: { email: from },
-        subject: params.subject,
-        content: [
-          { type: "text/plain", value: params.text },
-          { type: "text/html", value: html },
-        ],
-        tracking_settings: { click_tracking: { enable: true }, open_tracking: { enable: true } },
-      }),
-    });
-    if (!response.ok) {
-      const body = await response.text();
-      console.error(`SendGrid send failed [${response.status}]: ${body}`);
-      return { ok: false, provider: "sendgrid", status: "failed", error: `${response.status}: ${body}` };
-    }
     return {
-      ok: true,
+      ok: res.ok,
+      provider: "resend",
+      status: res.ok ? "sent" : "failed",
+      providerMessageId: res.messageId,
+      error: res.error,
+    };
+  }
+
+  if (smtpHost && from) {
+    const { sendEmailWithConfig } = await import("./integrations.server");
+    const res = await sendEmailWithConfig({
+      config: {
+        provider: "smtp",
+        smtpHost,
+        smtpPort: env("EMAIL_PORT") ? Number(env("EMAIL_PORT")) : 587,
+        smtpUser: env("EMAIL_USER"),
+        smtpPassword: env("EMAIL_PASSWORD"),
+        smtpSecure: env("EMAIL_SECURE") === "true",
+        fromEmail: from,
+        fromName: env("EMAIL_FROM_NAME"),
+      },
+      to: params.to,
+      subject: params.subject,
+      text: params.text,
+    });
+    return {
+      ok: res.ok,
+      provider: "smtp",
+      status: res.ok ? "sent" : "failed",
+      providerMessageId: res.messageId,
+      error: res.error,
+    };
+  }
+
+  if (sendgridKey && from) {
+    const { sendEmailWithConfig } = await import("./integrations.server");
+    const res = await sendEmailWithConfig({
+      config: {
+        provider: "sendgrid",
+        sendgridApiKey: sendgridKey,
+        fromEmail: from,
+        fromName: env("EMAIL_FROM_NAME"),
+      },
+      to: params.to,
+      subject: params.subject,
+      text: params.text,
+    });
+    return {
+      ok: res.ok,
       provider: "sendgrid",
-      status: "sent",
-      providerMessageId: response.headers.get("x-message-id") ?? undefined,
+      status: res.ok ? "sent" : "failed",
+      providerMessageId: res.messageId,
+      error: res.error,
     };
   }
 
@@ -129,7 +159,8 @@ export async function sendEmail(params: {
     ok: false,
     provider: "none",
     status: "failed",
-    error: "No email provider configured (set RESEND_API_KEY or SENDGRID_API_KEY)",
+    error:
+      "No email provider configured. Please configure Resend in Settings or set RESEND_API_KEY in .env",
   };
 }
 
@@ -169,17 +200,14 @@ async function twilioRequest(
 
   const sid = env("TWILIO_ACCOUNT_SID")!;
   const token = env("TWILIO_AUTH_TOKEN")!;
-  const response = await fetch(
-    `https://api.twilio.com/2010-04-01/Accounts/${sid}${resource}`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Basic ${btoa(`${sid}:${token}`)}`,
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body,
+  const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}${resource}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${btoa(`${sid}:${token}`)}`,
+      "Content-Type": "application/x-www-form-urlencoded",
     },
-  );
+    body,
+  });
   return { ok: response.ok, status: response.status, body: await response.text() };
 }
 
@@ -213,7 +241,12 @@ function parseTwilioResult(
 export async function sendSms(params: { to: string; text: string }): Promise<SendResult> {
   const from = env("TWILIO_PHONE_NUMBER");
   if (!from) {
-    return { ok: false, provider: "twilio", status: "failed", error: "TWILIO_PHONE_NUMBER is not configured" };
+    return {
+      ok: false,
+      provider: "twilio",
+      status: "failed",
+      error: "TWILIO_PHONE_NUMBER is not configured",
+    };
   }
   const result = await twilioRequest("/Messages.json", {
     To: params.to,
@@ -224,16 +257,38 @@ export async function sendSms(params: { to: string; text: string }): Promise<Sen
 }
 
 export async function sendWhatsApp(params: { to: string; text: string }): Promise<SendResult> {
+  const metaToken = env("WHATSAPP_ACCESS_TOKEN");
+  const metaPhoneId = env("WHATSAPP_PHONE_NUMBER_ID");
+
+  if (metaToken && metaPhoneId) {
+    const { sendMetaWhatsAppMessage } = await import("./integrations.server");
+    const res = await sendMetaWhatsAppMessage({
+      phoneNumberId: metaPhoneId,
+      accessToken: metaToken,
+      to: params.to,
+      text: params.text,
+    });
+    return {
+      ok: res.ok,
+      provider: "meta_whatsapp",
+      status: res.ok ? "sent" : "failed",
+      providerMessageId: res.messageId,
+      error: res.error,
+    };
+  }
+
   const from = env("TWILIO_WHATSAPP_NUMBER");
   if (!from) {
     return {
       ok: false,
-      provider: "twilio",
+      provider: "none",
       status: "failed",
-      error: "TWILIO_WHATSAPP_NUMBER is not configured",
+      error:
+        "WhatsApp provider not configured (set WHATSAPP_ACCESS_TOKEN and WHATSAPP_PHONE_NUMBER_ID)",
     };
   }
-  const normalize = (value: string) => (value.startsWith("whatsapp:") ? value : `whatsapp:${value}`);
+  const normalize = (value: string) =>
+    value.startsWith("whatsapp:") ? value : `whatsapp:${value}`;
   const result = await twilioRequest("/Messages.json", {
     To: normalize(params.to),
     From: normalize(from),
@@ -249,7 +304,12 @@ export async function placeCall(params: {
 }): Promise<SendResult> {
   const from = env("TWILIO_PHONE_NUMBER");
   if (!from) {
-    return { ok: false, provider: "twilio", status: "failed", error: "TWILIO_PHONE_NUMBER is not configured" };
+    return {
+      ok: false,
+      provider: "twilio",
+      status: "failed",
+      error: "TWILIO_PHONE_NUMBER is not configured",
+    };
   }
   const agentNumber = env("AGENT_PHONE_NUMBER");
   const twiml = agentNumber
