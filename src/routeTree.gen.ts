@@ -19,6 +19,7 @@ import { Route as AuthenticatedPipelineRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedTasksRouteImport } from './routes/_authenticated/tasks'
 import { Route as AuthenticatedTemplatesRouteImport } from './routes/_authenticated/templates'
+import { Route as AuthenticatedClientsIndexRouteImport } from './routes/_authenticated/clients.index'
 import { Route as AuthenticatedClientsClientIdRouteImport } from './routes/_authenticated/clients.$clientId'
 import { Route as ApiPublicTwilioCallStatusRouteImport } from './routes/api/public/twilio/call-status'
 import { Route as ApiPublicTwilioInboundRouteImport } from './routes/api/public/twilio/inbound'
@@ -75,6 +76,12 @@ const AuthenticatedTemplatesRoute = AuthenticatedTemplatesRouteImport.update({
   path: '/templates',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedClientsIndexRoute =
+  AuthenticatedClientsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedClientsRoute,
+  } as any)
 const AuthenticatedClientsClientIdRoute =
   AuthenticatedClientsClientIdRouteImport.update({
     id: '/$clientId',
@@ -122,6 +129,7 @@ export interface FileRoutesByFullPath {
   '/tasks': typeof AuthenticatedTasksRoute
   '/templates': typeof AuthenticatedTemplatesRoute
   '/clients/$clientId': typeof AuthenticatedClientsClientIdRoute
+  '/clients/': typeof AuthenticatedClientsIndexRoute
   '/api/public/twilio/call-status': typeof ApiPublicTwilioCallStatusRoute
   '/api/public/twilio/inbound': typeof ApiPublicTwilioInboundRoute
   '/api/integrations/google/oauth/callback': typeof ApiIntegrationsGoogleOauthCallbackRoute
@@ -132,13 +140,13 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/campaigns': typeof AuthenticatedCampaignsRoute
-  '/clients': typeof AuthenticatedClientsRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/pipeline': typeof AuthenticatedPipelineRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/tasks': typeof AuthenticatedTasksRoute
   '/templates': typeof AuthenticatedTemplatesRoute
   '/clients/$clientId': typeof AuthenticatedClientsClientIdRoute
+  '/clients': typeof AuthenticatedClientsIndexRoute
   '/api/public/twilio/call-status': typeof ApiPublicTwilioCallStatusRoute
   '/api/public/twilio/inbound': typeof ApiPublicTwilioInboundRoute
   '/api/integrations/google/oauth/callback': typeof ApiIntegrationsGoogleOauthCallbackRoute
@@ -158,6 +166,7 @@ export interface FileRoutesById {
   '/_authenticated/tasks': typeof AuthenticatedTasksRoute
   '/_authenticated/templates': typeof AuthenticatedTemplatesRoute
   '/_authenticated/clients/$clientId': typeof AuthenticatedClientsClientIdRoute
+  '/_authenticated/clients/': typeof AuthenticatedClientsIndexRoute
   '/api/public/twilio/call-status': typeof ApiPublicTwilioCallStatusRoute
   '/api/public/twilio/inbound': typeof ApiPublicTwilioInboundRoute
   '/api/integrations/google/oauth/callback': typeof ApiIntegrationsGoogleOauthCallbackRoute
@@ -177,6 +186,7 @@ export interface FileRouteTypes {
     | '/tasks'
     | '/templates'
     | '/clients/$clientId'
+    | '/clients/'
     | '/api/public/twilio/call-status'
     | '/api/public/twilio/inbound'
     | '/api/integrations/google/oauth/callback'
@@ -187,13 +197,13 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/campaigns'
-    | '/clients'
     | '/dashboard'
     | '/pipeline'
     | '/settings'
     | '/tasks'
     | '/templates'
     | '/clients/$clientId'
+    | '/clients'
     | '/api/public/twilio/call-status'
     | '/api/public/twilio/inbound'
     | '/api/integrations/google/oauth/callback'
@@ -212,6 +222,7 @@ export interface FileRouteTypes {
     | '/_authenticated/tasks'
     | '/_authenticated/templates'
     | '/_authenticated/clients/$clientId'
+    | '/_authenticated/clients/'
     | '/api/public/twilio/call-status'
     | '/api/public/twilio/inbound'
     | '/api/integrations/google/oauth/callback'
@@ -302,6 +313,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedTemplatesRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/clients/': {
+      id: '/_authenticated/clients/'
+      path: '/'
+      fullPath: '/clients/'
+      preLoaderRoute: typeof AuthenticatedClientsIndexRouteImport
+      parentRoute: typeof AuthenticatedClientsRoute
+    }
     '/_authenticated/clients/$clientId': {
       id: '/_authenticated/clients/$clientId'
       path: '/$clientId'
@@ -349,10 +367,12 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedClientsRouteChildren {
   AuthenticatedClientsClientIdRoute: typeof AuthenticatedClientsClientIdRoute
+  AuthenticatedClientsIndexRoute: typeof AuthenticatedClientsIndexRoute
 }
 
 const AuthenticatedClientsRouteChildren: AuthenticatedClientsRouteChildren = {
   AuthenticatedClientsClientIdRoute: AuthenticatedClientsClientIdRoute,
+  AuthenticatedClientsIndexRoute: AuthenticatedClientsIndexRoute,
 }
 
 const AuthenticatedClientsRouteWithChildren =

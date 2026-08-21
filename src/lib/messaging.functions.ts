@@ -91,14 +91,34 @@ const sendSchema = z
     }
   });
 
-const bulkSchema = z.object({
-  clientIds: z.array(z.string().uuid()).min(1).max(500),
-  channel: channelSchema,
-  subject: z.string().max(300).optional(),
-  body: z.string().min(1).max(6000),
-  campaignName: z.string().min(1).max(160),
-  templateId: z.string().uuid().optional(),
-});
+const bulkSchema = z
+  .object({
+    clientIds: z.array(z.string().uuid()).min(1).max(500),
+    channel: channelSchema,
+    subject: z.string().max(300).optional(),
+    body: z.string().min(1).max(6000),
+    campaignName: z.string().min(1).max(160),
+    templateId: z.string().uuid().optional(),
+    attachments: z.array(attachmentSchema).max(20).optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.attachments || data.attachments.length === 0) return;
+    let totalBytes = 0;
+    for (const att of data.attachments) {
+      const cleanLen = att.contentBase64.replace(/\s+/g, "").replace(/=+$/, "").length;
+      totalBytes += Math.floor((cleanLen * 3) / 4);
+    }
+    if (totalBytes > MAX_ATTACHMENT_SIZE_TOTAL) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.too_big,
+        maximum: MAX_ATTACHMENT_SIZE_TOTAL,
+        type: "number",
+        inclusive: true,
+        message: `Total attachments size exceeds 25 MB limit.`,
+        path: ["attachments"],
+      });
+    }
+  });
 
 const callSchema = z.object({
   clientId: z.string().uuid(),
@@ -149,6 +169,7 @@ export const sendBulkMessage = createServerFn({ method: "POST" })
       body: data.body,
       campaignName: data.campaignName,
       templateId: data.templateId,
+      attachments: data.attachments,
     });
   });
 

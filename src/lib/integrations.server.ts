@@ -418,6 +418,14 @@ export async function sendEmailWithConfig(params: {
       if (cc && cc.length > 0) emailPayload.cc = cc;
       if (bcc && bcc.length > 0) emailPayload.bcc = bcc;
 
+      if (params.attachments && params.attachments.length > 0) {
+        emailPayload.attachments = params.attachments.map((a) => ({
+          filename: a.filename,
+          content: Buffer.from(a.contentBase64, "base64"),
+          contentType: a.mimeType,
+        }));
+      }
+
       const { data, error } = await resend.emails.send(emailPayload);
 
       if (error) {
@@ -497,6 +505,14 @@ export async function sendEmailWithConfig(params: {
         subject,
         text,
         html,
+        attachments:
+          params.attachments && params.attachments.length > 0
+            ? params.attachments.map((a) => ({
+                filename: a.filename,
+                content: Buffer.from(a.contentBase64, "base64"),
+                contentType: a.mimeType,
+              }))
+            : undefined,
       });
 
       return { ok: true, messageId: info.messageId || undefined };
@@ -514,21 +530,32 @@ export async function sendEmailWithConfig(params: {
     if (!key) return { ok: false, error: "SendGrid API Key is missing." };
 
     try {
+      const sendgridBody: any = {
+        personalizations: [{ to: [{ email: to }] }],
+        from: { email: config.fromEmail, name: config.fromName },
+        subject,
+        content: [
+          { type: "text/plain", value: text },
+          { type: "text/html", value: html },
+        ],
+      };
+
+      if (params.attachments && params.attachments.length > 0) {
+        sendgridBody.attachments = params.attachments.map((a) => ({
+          content: a.contentBase64,
+          filename: a.filename,
+          type: a.mimeType,
+          disposition: "attachment",
+        }));
+      }
+
       const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${key}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          personalizations: [{ to: [{ email: to }] }],
-          from: { email: config.fromEmail, name: config.fromName },
-          subject,
-          content: [
-            { type: "text/plain", value: text },
-            { type: "text/html", value: html },
-          ],
-        }),
+        body: JSON.stringify(sendgridBody),
       });
 
       if (!response.ok) {

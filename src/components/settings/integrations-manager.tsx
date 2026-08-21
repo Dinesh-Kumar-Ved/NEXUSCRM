@@ -48,6 +48,7 @@ import {
   testEmailIntegration,
   testWhatsAppIntegration,
 } from "@/lib/integrations.functions";
+import { triggerGmailSync } from "@/lib/email-conversations.functions";
 import type { MaskedIntegrationInfo } from "@/lib/integrations.server";
 
 interface IntegrationsManagerProps {
@@ -94,6 +95,44 @@ export function IntegrationsManager({ workspaceId }: IntegrationsManagerProps) {
 
   // Test recipient
   const [testRecipientEmail, setTestRecipientEmail] = useState("");
+
+  // Gmail sync state
+  const syncGmailFn = useServerFn(triggerGmailSync);
+  const [isSyncingGmail, setIsSyncingGmail] = useState(false);
+  const [lastSyncResult, setLastSyncResult] = useState<{
+    synced: number;
+    newMessages: number;
+    timestamp: Date;
+  } | null>(null);
+
+  const handleSyncGmail = async () => {
+    if (!workspaceId) {
+      toast.error("Workspace ID is required to sync Gmail.");
+      return;
+    }
+    setIsSyncingGmail(true);
+    try {
+      const res = await syncGmailFn({ data: { workspaceId } });
+      if (res.ok) {
+        setLastSyncResult({
+          synced: res.synced,
+          newMessages: res.newMessages,
+          timestamp: new Date(),
+        });
+        if (res.newMessages > 0) {
+          toast.success(`Gmail sync complete: ${res.newMessages} new message${res.newMessages > 1 ? "s" : ""} synced!`);
+        } else {
+          toast.success(`Gmail inbox is up to date (${res.synced} messages total).`);
+        }
+        void queryClient.invalidateQueries({ queryKey: ["integrations-status"] });
+        void queryClient.invalidateQueries({ queryKey: ["unmatched-emails", workspaceId] });
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to sync Gmail.");
+    } finally {
+      setIsSyncingGmail(false);
+    }
+  };
 
   // Handle URL query parameters from OAuth redirect callback
   useEffect(() => {
@@ -522,6 +561,14 @@ export function IntegrationsManager({ workspaceId }: IntegrationsManagerProps) {
                     <span>{new Date(em.lastTestedAt).toLocaleString()}</span>
                   </div>
                 )}
+                {lastSyncResult && (
+                  <div className="flex justify-between text-[11px] text-emerald-600 dark:text-emerald-400 pt-1 border-t font-medium">
+                    <span>Last Gmail Sync:</span>
+                    <span>
+                      {lastSyncResult.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} ({lastSyncResult.newMessages} new messages)
+                    </span>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="rounded-lg border border-dashed p-4 text-center text-muted-foreground space-y-2">
@@ -605,6 +652,19 @@ export function IntegrationsManager({ workspaceId }: IntegrationsManagerProps) {
             <div className="flex items-center gap-2">
               {em?.isConnected && (
                 <>
+                  {isGmail && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSyncGmail}
+                      disabled={isSyncingGmail}
+                      className="gap-1.5 text-xs text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
+                    >
+                      <RefreshCw className={`size-3 ${isSyncingGmail ? "animate-spin" : ""}`} />
+                      {isSyncingGmail ? "Syncing..." : "Sync Gmail"}
+                    </Button>
+                  )}
+
                   <Button
                     variant="outline"
                     size="sm"

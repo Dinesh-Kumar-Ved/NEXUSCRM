@@ -1,662 +1,758 @@
-export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
 
 export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.15";
-  };
+    PostgrestVersion: "14.15"
+  }
   public: {
     Tables: {
       activities: {
         Row: {
-          body: string | null;
-          client_id: string;
-          created_at: string;
-          created_by: string | null;
-          id: string;
-          meta: Json;
-          title: string;
-          type: string;
-        };
+          body: string | null
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          meta: Json
+          title: string
+          type: string
+        }
         Insert: {
-          body?: string | null;
-          client_id: string;
-          created_at?: string;
-          created_by?: string | null;
-          id?: string;
-          meta?: Json;
-          title: string;
-          type: string;
-        };
+          body?: string | null
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          meta?: Json
+          title: string
+          type: string
+        }
         Update: {
-          body?: string | null;
-          client_id?: string;
-          created_at?: string;
-          created_by?: string | null;
-          id?: string;
-          meta?: Json;
-          title?: string;
-          type?: string;
-        };
+          body?: string | null
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          meta?: Json
+          title?: string
+          type?: string
+        }
         Relationships: [
           {
-            foreignKeyName: "activities_client_id_fkey";
-            columns: ["client_id"];
-            isOneToOne: false;
-            referencedRelation: "clients";
-            referencedColumns: ["id"];
+            foreignKeyName: "activities_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       call_logs: {
         Row: {
-          client_id: string | null;
-          created_at: string;
-          created_by: string | null;
-          direction: Database["public"]["Enums"]["msg_direction"];
-          duration_seconds: number;
-          from_number: string | null;
-          id: string;
-          outcome_notes: string | null;
-          provider: string | null;
-          provider_call_id: string | null;
-          status: string;
-          to_number: string | null;
-        };
+          client_id: string | null
+          created_at: string
+          created_by: string | null
+          direction: Database["public"]["Enums"]["msg_direction"]
+          duration_seconds: number
+          from_number: string | null
+          id: string
+          outcome_notes: string | null
+          provider: string | null
+          provider_call_id: string | null
+          status: string
+          to_number: string | null
+        }
         Insert: {
-          client_id?: string | null;
-          created_at?: string;
-          created_by?: string | null;
-          direction?: Database["public"]["Enums"]["msg_direction"];
-          duration_seconds?: number;
-          from_number?: string | null;
-          id?: string;
-          outcome_notes?: string | null;
-          provider?: string | null;
-          provider_call_id?: string | null;
-          status?: string;
-          to_number?: string | null;
-        };
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          direction?: Database["public"]["Enums"]["msg_direction"]
+          duration_seconds?: number
+          from_number?: string | null
+          id?: string
+          outcome_notes?: string | null
+          provider?: string | null
+          provider_call_id?: string | null
+          status?: string
+          to_number?: string | null
+        }
         Update: {
-          client_id?: string | null;
-          created_at?: string;
-          created_by?: string | null;
-          direction?: Database["public"]["Enums"]["msg_direction"];
-          duration_seconds?: number;
-          from_number?: string | null;
-          id?: string;
-          outcome_notes?: string | null;
-          provider?: string | null;
-          provider_call_id?: string | null;
-          status?: string;
-          to_number?: string | null;
-        };
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          direction?: Database["public"]["Enums"]["msg_direction"]
+          duration_seconds?: number
+          from_number?: string | null
+          id?: string
+          outcome_notes?: string | null
+          provider?: string | null
+          provider_call_id?: string | null
+          status?: string
+          to_number?: string | null
+        }
         Relationships: [
           {
-            foreignKeyName: "call_logs_client_id_fkey";
-            columns: ["client_id"];
-            isOneToOne: false;
-            referencedRelation: "clients";
-            referencedColumns: ["id"];
+            foreignKeyName: "call_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       campaigns: {
         Row: {
-          body: string;
-          channel: Database["public"]["Enums"]["msg_channel"];
-          created_at: string;
-          created_by: string | null;
-          failed_count: number;
-          id: string;
-          name: string;
-          recipient_count: number;
-          sent_count: number;
-          status: string;
-          subject: string | null;
-        };
+          body: string
+          channel: Database["public"]["Enums"]["msg_channel"]
+          created_at: string
+          created_by: string | null
+          failed_count: number
+          id: string
+          name: string
+          recipient_count: number
+          sent_count: number
+          status: string
+          subject: string | null
+        }
         Insert: {
-          body: string;
-          channel: Database["public"]["Enums"]["msg_channel"];
-          created_at?: string;
-          created_by?: string | null;
-          failed_count?: number;
-          id?: string;
-          name: string;
-          recipient_count?: number;
-          sent_count?: number;
-          status?: string;
-          subject?: string | null;
-        };
+          body: string
+          channel: Database["public"]["Enums"]["msg_channel"]
+          created_at?: string
+          created_by?: string | null
+          failed_count?: number
+          id?: string
+          name: string
+          recipient_count?: number
+          sent_count?: number
+          status?: string
+          subject?: string | null
+        }
         Update: {
-          body?: string;
-          channel?: Database["public"]["Enums"]["msg_channel"];
-          created_at?: string;
-          created_by?: string | null;
-          failed_count?: number;
-          id?: string;
-          name?: string;
-          recipient_count?: number;
-          sent_count?: number;
-          status?: string;
-          subject?: string | null;
-        };
-        Relationships: [];
-      };
+          body?: string
+          channel?: Database["public"]["Enums"]["msg_channel"]
+          created_at?: string
+          created_by?: string | null
+          failed_count?: number
+          id?: string
+          name?: string
+          recipient_count?: number
+          sent_count?: number
+          status?: string
+          subject?: string | null
+        }
+        Relationships: []
+      }
       clients: {
         Row: {
-          assigned_to: string | null;
-          company: string | null;
-          created_at: string;
-          created_by: string | null;
-          deal_value: number;
-          email: string | null;
-          email_opted_out: boolean;
-          id: string;
-          last_contacted_at: string | null;
-          name: string;
-          notes: string | null;
-          phone: string | null;
-          sms_opted_out: boolean;
-          source: string | null;
-          status: Database["public"]["Enums"]["deal_status"];
-          tags: string[];
-          updated_at: string;
-          website: string | null;
-          whatsapp: string | null;
-          workspace_id: string | null;
-        };
+          assigned_to: string | null
+          company: string | null
+          created_at: string
+          created_by: string | null
+          deal_value: number
+          email: string | null
+          email_opted_out: boolean
+          id: string
+          last_contacted_at: string | null
+          name: string
+          notes: string | null
+          phone: string | null
+          sms_opted_out: boolean
+          source: string | null
+          status: Database["public"]["Enums"]["deal_status"]
+          tags: string[]
+          updated_at: string
+          website: string | null
+          whatsapp: string | null
+          workspace_id: string | null
+        }
         Insert: {
-          assigned_to?: string | null;
-          company?: string | null;
-          created_at?: string;
-          created_by?: string | null;
-          deal_value?: number;
-          email?: string | null;
-          email_opted_out?: boolean;
-          id?: string;
-          last_contacted_at?: string | null;
-          name: string;
-          notes?: string | null;
-          phone?: string | null;
-          sms_opted_out?: boolean;
-          source?: string | null;
-          status?: Database["public"]["Enums"]["deal_status"];
-          tags?: string[];
-          updated_at?: string;
-          website?: string | null;
-          whatsapp?: string | null;
-          workspace_id?: string | null;
-        };
+          assigned_to?: string | null
+          company?: string | null
+          created_at?: string
+          created_by?: string | null
+          deal_value?: number
+          email?: string | null
+          email_opted_out?: boolean
+          id?: string
+          last_contacted_at?: string | null
+          name: string
+          notes?: string | null
+          phone?: string | null
+          sms_opted_out?: boolean
+          source?: string | null
+          status?: Database["public"]["Enums"]["deal_status"]
+          tags?: string[]
+          updated_at?: string
+          website?: string | null
+          whatsapp?: string | null
+          workspace_id?: string | null
+        }
         Update: {
-          assigned_to?: string | null;
-          company?: string | null;
-          created_at?: string;
-          created_by?: string | null;
-          deal_value?: number;
-          email?: string | null;
-          email_opted_out?: boolean;
-          id?: string;
-          last_contacted_at?: string | null;
-          name?: string;
-          notes?: string | null;
-          phone?: string | null;
-          sms_opted_out?: boolean;
-          source?: string | null;
-          status?: Database["public"]["Enums"]["deal_status"];
-          tags?: string[];
-          updated_at?: string;
-          website?: string | null;
-          whatsapp?: string | null;
-          workspace_id?: string | null;
-        };
+          assigned_to?: string | null
+          company?: string | null
+          created_at?: string
+          created_by?: string | null
+          deal_value?: number
+          email?: string | null
+          email_opted_out?: boolean
+          id?: string
+          last_contacted_at?: string | null
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          sms_opted_out?: boolean
+          source?: string | null
+          status?: Database["public"]["Enums"]["deal_status"]
+          tags?: string[]
+          updated_at?: string
+          website?: string | null
+          whatsapp?: string | null
+          workspace_id?: string | null
+        }
         Relationships: [
           {
-            foreignKeyName: "clients_workspace_id_fkey";
-            columns: ["workspace_id"];
-            isOneToOne: false;
-            referencedRelation: "workspaces";
-            referencedColumns: ["id"];
+            foreignKeyName: "clients_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       documents: {
         Row: {
-          client_id: string;
-          created_at: string;
-          id: string;
-          mime_type: string | null;
-          name: string;
-          size_bytes: number;
-          storage_path: string;
-          uploaded_by: string | null;
-        };
+          client_id: string
+          created_at: string
+          id: string
+          mime_type: string | null
+          name: string
+          size_bytes: number
+          storage_path: string
+          uploaded_by: string | null
+        }
         Insert: {
-          client_id: string;
-          created_at?: string;
-          id?: string;
-          mime_type?: string | null;
-          name: string;
-          size_bytes?: number;
-          storage_path: string;
-          uploaded_by?: string | null;
-        };
+          client_id: string
+          created_at?: string
+          id?: string
+          mime_type?: string | null
+          name: string
+          size_bytes?: number
+          storage_path: string
+          uploaded_by?: string | null
+        }
         Update: {
-          client_id?: string;
-          created_at?: string;
-          id?: string;
-          mime_type?: string | null;
-          name?: string;
-          size_bytes?: number;
-          storage_path?: string;
-          uploaded_by?: string | null;
-        };
+          client_id?: string
+          created_at?: string
+          id?: string
+          mime_type?: string | null
+          name?: string
+          size_bytes?: number
+          storage_path?: string
+          uploaded_by?: string | null
+        }
         Relationships: [
           {
-            foreignKeyName: "documents_client_id_fkey";
-            columns: ["client_id"];
-            isOneToOne: false;
-            referencedRelation: "clients";
-            referencedColumns: ["id"];
+            foreignKeyName: "documents_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
+      email_messages: {
+        Row: {
+          attachments: Json
+          bcc: string | null
+          body_html: string | null
+          body_text: string | null
+          cc: string | null
+          client_id: string | null
+          created_at: string | null
+          direction: string
+          from_email: string
+          from_name: string | null
+          id: string
+          in_reply_to: string | null
+          provider_message_id: string
+          received_at: string | null
+          references: string | null
+          rfc_message_id: string
+          sent_at: string | null
+          subject: string | null
+          thread_id: string
+          to_email: string
+          updated_at: string | null
+          workspace_id: string
+        }
+        Insert: {
+          attachments?: Json
+          bcc?: string | null
+          body_html?: string | null
+          body_text?: string | null
+          cc?: string | null
+          client_id?: string | null
+          created_at?: string | null
+          direction: string
+          from_email: string
+          from_name?: string | null
+          id?: string
+          in_reply_to?: string | null
+          provider_message_id: string
+          received_at?: string | null
+          references?: string | null
+          rfc_message_id?: string
+          sent_at?: string | null
+          subject?: string | null
+          thread_id: string
+          to_email: string
+          updated_at?: string | null
+          workspace_id: string
+        }
+        Update: {
+          attachments?: Json
+          bcc?: string | null
+          body_html?: string | null
+          body_text?: string | null
+          cc?: string | null
+          client_id?: string | null
+          created_at?: string | null
+          direction?: string
+          from_email?: string
+          from_name?: string | null
+          id?: string
+          in_reply_to?: string | null
+          provider_message_id?: string
+          received_at?: string | null
+          references?: string | null
+          rfc_message_id?: string
+          sent_at?: string | null
+          subject?: string | null
+          thread_id?: string
+          to_email?: string
+          updated_at?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_messages_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_messages_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
-          body: string;
-          campaign_id: string | null;
-          channel: Database["public"]["Enums"]["msg_channel"];
-          clicked_at: string | null;
-          client_id: string | null;
-          created_at: string;
-          created_by: string | null;
-          direction: Database["public"]["Enums"]["msg_direction"];
-          error: string | null;
-          from_address: string | null;
-          id: string;
-          opened_at: string | null;
-          provider: string | null;
-          provider_message_id: string | null;
-          status: string;
-          subject: string | null;
-          to_address: string | null;
-        };
+          body: string
+          campaign_id: string | null
+          channel: Database["public"]["Enums"]["msg_channel"]
+          clicked_at: string | null
+          client_id: string | null
+          created_at: string
+          created_by: string | null
+          direction: Database["public"]["Enums"]["msg_direction"]
+          error: string | null
+          from_address: string | null
+          id: string
+          opened_at: string | null
+          provider: string | null
+          provider_message_id: string | null
+          status: string
+          subject: string | null
+          to_address: string | null
+        }
         Insert: {
-          body: string;
-          campaign_id?: string | null;
-          channel: Database["public"]["Enums"]["msg_channel"];
-          clicked_at?: string | null;
-          client_id?: string | null;
-          created_at?: string;
-          created_by?: string | null;
-          direction?: Database["public"]["Enums"]["msg_direction"];
-          error?: string | null;
-          from_address?: string | null;
-          id?: string;
-          opened_at?: string | null;
-          provider?: string | null;
-          provider_message_id?: string | null;
-          status?: string;
-          subject?: string | null;
-          to_address?: string | null;
-        };
+          body: string
+          campaign_id?: string | null
+          channel: Database["public"]["Enums"]["msg_channel"]
+          clicked_at?: string | null
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          direction?: Database["public"]["Enums"]["msg_direction"]
+          error?: string | null
+          from_address?: string | null
+          id?: string
+          opened_at?: string | null
+          provider?: string | null
+          provider_message_id?: string | null
+          status?: string
+          subject?: string | null
+          to_address?: string | null
+        }
         Update: {
-          body?: string;
-          campaign_id?: string | null;
-          channel?: Database["public"]["Enums"]["msg_channel"];
-          clicked_at?: string | null;
-          client_id?: string | null;
-          created_at?: string;
-          created_by?: string | null;
-          direction?: Database["public"]["Enums"]["msg_direction"];
-          error?: string | null;
-          from_address?: string | null;
-          id?: string;
-          opened_at?: string | null;
-          provider?: string | null;
-          provider_message_id?: string | null;
-          status?: string;
-          subject?: string | null;
-          to_address?: string | null;
-        };
+          body?: string
+          campaign_id?: string | null
+          channel?: Database["public"]["Enums"]["msg_channel"]
+          clicked_at?: string | null
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          direction?: Database["public"]["Enums"]["msg_direction"]
+          error?: string | null
+          from_address?: string | null
+          id?: string
+          opened_at?: string | null
+          provider?: string | null
+          provider_message_id?: string | null
+          status?: string
+          subject?: string | null
+          to_address?: string | null
+        }
         Relationships: [
           {
-            foreignKeyName: "messages_campaign_id_fkey";
-            columns: ["campaign_id"];
-            isOneToOne: false;
-            referencedRelation: "campaigns";
-            referencedColumns: ["id"];
+            foreignKeyName: "messages_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "campaigns"
+            referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "messages_client_id_fkey";
-            columns: ["client_id"];
-            isOneToOne: false;
-            referencedRelation: "clients";
-            referencedColumns: ["id"];
+            foreignKeyName: "messages_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       profiles: {
         Row: {
-          avatar_url: string | null;
-          created_at: string;
-          email: string | null;
-          full_name: string | null;
-          id: string;
-          updated_at: string;
-        };
+          avatar_url: string | null
+          created_at: string
+          email: string | null
+          full_name: string | null
+          id: string
+          updated_at: string
+        }
         Insert: {
-          avatar_url?: string | null;
-          created_at?: string;
-          email?: string | null;
-          full_name?: string | null;
-          id: string;
-          updated_at?: string;
-        };
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id: string
+          updated_at?: string
+        }
         Update: {
-          avatar_url?: string | null;
-          created_at?: string;
-          email?: string | null;
-          full_name?: string | null;
-          id?: string;
-          updated_at?: string;
-        };
-        Relationships: [];
-      };
+          avatar_url?: string | null
+          created_at?: string
+          email?: string | null
+          full_name?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       status_history: {
         Row: {
-          changed_by: string | null;
-          client_id: string;
-          created_at: string;
-          from_status: Database["public"]["Enums"]["deal_status"] | null;
-          id: string;
-          to_status: Database["public"]["Enums"]["deal_status"];
-        };
+          changed_by: string | null
+          client_id: string
+          created_at: string
+          from_status: Database["public"]["Enums"]["deal_status"] | null
+          id: string
+          to_status: Database["public"]["Enums"]["deal_status"]
+        }
         Insert: {
-          changed_by?: string | null;
-          client_id: string;
-          created_at?: string;
-          from_status?: Database["public"]["Enums"]["deal_status"] | null;
-          id?: string;
-          to_status: Database["public"]["Enums"]["deal_status"];
-        };
+          changed_by?: string | null
+          client_id: string
+          created_at?: string
+          from_status?: Database["public"]["Enums"]["deal_status"] | null
+          id?: string
+          to_status: Database["public"]["Enums"]["deal_status"]
+        }
         Update: {
-          changed_by?: string | null;
-          client_id?: string;
-          created_at?: string;
-          from_status?: Database["public"]["Enums"]["deal_status"] | null;
-          id?: string;
-          to_status?: Database["public"]["Enums"]["deal_status"];
-        };
+          changed_by?: string | null
+          client_id?: string
+          created_at?: string
+          from_status?: Database["public"]["Enums"]["deal_status"] | null
+          id?: string
+          to_status?: Database["public"]["Enums"]["deal_status"]
+        }
         Relationships: [
           {
-            foreignKeyName: "status_history_client_id_fkey";
-            columns: ["client_id"];
-            isOneToOne: false;
-            referencedRelation: "clients";
-            referencedColumns: ["id"];
+            foreignKeyName: "status_history_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       tasks: {
         Row: {
-          assigned_to: string | null;
-          client_id: string | null;
-          completed: boolean;
-          created_at: string;
-          created_by: string | null;
-          due_at: string | null;
-          id: string;
-          notes: string | null;
-          title: string;
-        };
+          assigned_to: string | null
+          client_id: string | null
+          completed: boolean
+          created_at: string
+          created_by: string | null
+          due_at: string | null
+          id: string
+          notes: string | null
+          title: string
+        }
         Insert: {
-          assigned_to?: string | null;
-          client_id?: string | null;
-          completed?: boolean;
-          created_at?: string;
-          created_by?: string | null;
-          due_at?: string | null;
-          id?: string;
-          notes?: string | null;
-          title: string;
-        };
+          assigned_to?: string | null
+          client_id?: string | null
+          completed?: boolean
+          created_at?: string
+          created_by?: string | null
+          due_at?: string | null
+          id?: string
+          notes?: string | null
+          title: string
+        }
         Update: {
-          assigned_to?: string | null;
-          client_id?: string | null;
-          completed?: boolean;
-          created_at?: string;
-          created_by?: string | null;
-          due_at?: string | null;
-          id?: string;
-          notes?: string | null;
-          title?: string;
-        };
+          assigned_to?: string | null
+          client_id?: string | null
+          completed?: boolean
+          created_at?: string
+          created_by?: string | null
+          due_at?: string | null
+          id?: string
+          notes?: string | null
+          title?: string
+        }
         Relationships: [
           {
-            foreignKeyName: "tasks_client_id_fkey";
-            columns: ["client_id"];
-            isOneToOne: false;
-            referencedRelation: "clients";
-            referencedColumns: ["id"];
+            foreignKeyName: "tasks_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
       templates: {
         Row: {
-          body: string;
-          channel: Database["public"]["Enums"]["msg_channel"];
-          created_at: string;
-          created_by: string | null;
-          id: string;
-          name: string;
-          subject: string | null;
-          updated_at: string;
-        };
+          body: string
+          channel: Database["public"]["Enums"]["msg_channel"]
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          subject: string | null
+          updated_at: string
+        }
         Insert: {
-          body: string;
-          channel?: Database["public"]["Enums"]["msg_channel"];
-          created_at?: string;
-          created_by?: string | null;
-          id?: string;
-          name: string;
-          subject?: string | null;
-          updated_at?: string;
-        };
+          body: string
+          channel?: Database["public"]["Enums"]["msg_channel"]
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          subject?: string | null
+          updated_at?: string
+        }
         Update: {
-          body?: string;
-          channel?: Database["public"]["Enums"]["msg_channel"];
-          created_at?: string;
-          created_by?: string | null;
-          id?: string;
-          name?: string;
-          subject?: string | null;
-          updated_at?: string;
-        };
-        Relationships: [];
-      };
+          body?: string
+          channel?: Database["public"]["Enums"]["msg_channel"]
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          subject?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
-          created_at: string;
-          role: Database["public"]["Enums"]["app_role"];
-          user_id: string;
-        };
+          created_at: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
         Insert: {
-          created_at?: string;
-          role: Database["public"]["Enums"]["app_role"];
-          user_id: string;
-        };
+          created_at?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
         Update: {
-          created_at?: string;
-          role?: Database["public"]["Enums"]["app_role"];
-          user_id?: string;
-        };
-        Relationships: [];
-      };
+          created_at?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
       workspace_integrations: {
         Row: {
-          config: Json;
-          created_at: string;
-          details: Json;
-          encrypted_refresh_token: Json | null;
-          id: string;
-          is_active: boolean;
-          last_test_error: string | null;
-          last_tested_at: string | null;
-          provider: string;
-          provider_type: string;
-          status: string;
-          updated_at: string;
-          workspace_id: string;
-        };
+          config: Json
+          created_at: string
+          details: Json
+          encrypted_refresh_token: Json | null
+          id: string
+          is_active: boolean
+          last_test_error: string | null
+          last_tested_at: string | null
+          provider: string
+          provider_type: string
+          status: string
+          updated_at: string
+          workspace_id: string
+        }
         Insert: {
-          config?: Json;
-          created_at?: string;
-          details?: Json;
-          encrypted_refresh_token?: Json | null;
-          id?: string;
-          is_active?: boolean;
-          last_test_error?: string | null;
-          last_tested_at?: string | null;
-          provider: string;
-          provider_type: string;
-          status?: string;
-          updated_at?: string;
-          workspace_id: string;
-        };
+          config?: Json
+          created_at?: string
+          details?: Json
+          encrypted_refresh_token?: Json | null
+          id?: string
+          is_active?: boolean
+          last_test_error?: string | null
+          last_tested_at?: string | null
+          provider: string
+          provider_type: string
+          status?: string
+          updated_at?: string
+          workspace_id: string
+        }
         Update: {
-          config?: Json;
-          created_at?: string;
-          details?: Json;
-          encrypted_refresh_token?: Json | null;
-          id?: string;
-          is_active?: boolean;
-          last_test_error?: string | null;
-          last_tested_at?: string | null;
-          provider?: string;
-          provider_type?: string;
-          status?: string;
-          updated_at?: string;
-          workspace_id?: string;
-        };
+          config?: Json
+          created_at?: string
+          details?: Json
+          encrypted_refresh_token?: Json | null
+          id?: string
+          is_active?: boolean
+          last_test_error?: string | null
+          last_tested_at?: string | null
+          provider?: string
+          provider_type?: string
+          status?: string
+          updated_at?: string
+          workspace_id?: string
+        }
         Relationships: [
           {
-            foreignKeyName: "workspace_integrations_workspace_id_fkey";
-            columns: ["workspace_id"];
-            isOneToOne: false;
-            referencedRelation: "workspaces";
-            referencedColumns: ["id"];
+            foreignKeyName: "workspace_integrations_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
           },
-        ];
-      };
-      workspace_oauth_states: {
-        Row: {
-          created_at: string;
-          expires_at: string;
-          id: string;
-          provider: string;
-          state: string;
-          user_id: string;
-          workspace_id: string;
-        };
-        Insert: {
-          created_at?: string;
-          expires_at?: string;
-          id?: string;
-          provider?: string;
-          state: string;
-          user_id: string;
-          workspace_id: string;
-        };
-        Update: {
-          created_at?: string;
-          expires_at?: string;
-          id?: string;
-          provider?: string;
-          state?: string;
-          user_id?: string;
-          workspace_id?: string;
-        };
-        Relationships: [
-          {
-            foreignKeyName: "workspace_oauth_states_workspace_id_fkey";
-            columns: ["workspace_id"];
-            isOneToOne: false;
-            referencedRelation: "workspaces";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
+        ]
+      }
       workspace_members: {
         Row: {
-          created_at: string;
-          role: Database["public"]["Enums"]["app_role"];
-          user_id: string;
-          workspace_id: string;
-        };
+          created_at: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+          workspace_id: string
+        }
         Insert: {
-          created_at?: string;
-          role?: Database["public"]["Enums"]["app_role"];
-          user_id: string;
-          workspace_id: string;
-        };
+          created_at?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+          workspace_id: string
+        }
         Update: {
-          created_at?: string;
-          role?: Database["public"]["Enums"]["app_role"];
-          user_id?: string;
-          workspace_id?: string;
-        };
+          created_at?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+          workspace_id?: string
+        }
         Relationships: [
           {
-            foreignKeyName: "workspace_members_workspace_id_fkey";
-            columns: ["workspace_id"];
-            isOneToOne: false;
-            referencedRelation: "workspaces";
-            referencedColumns: ["id"];
+            foreignKeyName: "workspace_members_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
           },
-        ];
-      };
+        ]
+      }
+      workspace_oauth_states: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          provider: string
+          state: string
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          provider?: string
+          state: string
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          provider?: string
+          state?: string
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_oauth_states_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workspaces: {
         Row: {
-          created_at: string;
-          created_by: string;
-          id: string;
-          name: string;
-        };
+          created_at: string
+          created_by: string
+          id: string
+          name: string
+        }
         Insert: {
-          created_at?: string;
-          created_by: string;
-          id?: string;
-          name: string;
-        };
+          created_at?: string
+          created_by?: string
+          id?: string
+          name: string
+        }
         Update: {
-          created_at?: string;
-          created_by?: string;
-          id?: string;
-          name?: string;
-        };
-        Relationships: [];
-      };
-    };
+          created_at?: string
+          created_by?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+    }
     Views: {
-      [_ in never]: never;
-    };
+      [_ in never]: never
+    }
     Functions: {
       has_role: {
         Args: {
-          _role: Database["public"]["Enums"]["app_role"];
-          _user_id: string;
-        };
-        Returns: boolean;
-      };
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       is_workspace_member: {
-        Args: { _user_id?: string; _workspace_id: string };
-        Returns: boolean;
-      };
-    };
+        Args: { _user_id?: string; _workspace_id: string }
+        Returns: boolean
+      }
+    }
     Enums: {
-      app_role: "admin" | "sales_rep";
+      app_role: "admin" | "sales_rep"
       deal_status:
         | "lead"
         | "proposal_sent"
@@ -665,126 +761,132 @@ export type Database = {
         | "follow_up_needed"
         | "on_hold"
         | "accepted"
-        | "rejected";
-      msg_channel: "email" | "sms" | "whatsapp" | "call";
-      msg_direction: "outbound" | "inbound";
-    };
+        | "rejected"
+      msg_channel: "email" | "sms" | "whatsapp" | "call"
+      msg_direction: "outbound" | "inbound"
+    }
     CompositeTypes: {
-      [_ in never]: never;
-    };
-  };
-};
+      [_ in never]: never
+    }
+  }
+}
 
-type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">;
+type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
 
-type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">];
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
 
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals;
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
+  schema: keyof DatabaseWithoutInternals
 }
   ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
       DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
-      Row: infer R;
+      Row: infer R
     }
     ? R
     : never
-  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
-    ? (DefaultSchema["Tables"] & DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
-        Row: infer R;
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])
+    ? (DefaultSchema["Tables"] &
+        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+        Row: infer R
       }
       ? R
       : never
-    : never;
+    : never
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals;
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
+  schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Insert: infer I;
+      Insert: infer I
     }
     ? I
     : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
     ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Insert: infer I;
+        Insert: infer I
       }
       ? I
       : never
-    : never;
+    : never
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    keyof DefaultSchema["Tables"] | { schema: keyof DatabaseWithoutInternals },
-  TableName extends (DefaultSchemaTableNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals;
+    | keyof DefaultSchema["Tables"]
+    | { schema: keyof DatabaseWithoutInternals },
+  TableName extends DefaultSchemaTableNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
+  schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
-      Update: infer U;
+      Update: infer U
     }
     ? U
     : never
   : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
     ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
-        Update: infer U;
+        Update: infer U
       }
       ? U
       : never
-    : never;
+    : never
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    keyof DefaultSchema["Enums"] | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals;
+    | keyof DefaultSchema["Enums"]
+    | { schema: keyof DatabaseWithoutInternals },
+  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never) = never,
+    : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
+  schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
   : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
     ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
-    : never;
+    : never
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
-    keyof DefaultSchema["CompositeTypes"] | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
-    schema: keyof DatabaseWithoutInternals;
+    | keyof DefaultSchema["CompositeTypes"]
+    | { schema: keyof DatabaseWithoutInternals },
+  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+    schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never) = never,
+    : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
-  schema: keyof DatabaseWithoutInternals;
+  schema: keyof DatabaseWithoutInternals
 }
   ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
     ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
-    : never;
+    : never
 
 export const Constants = {
   public: {
@@ -804,4 +906,4 @@ export const Constants = {
       msg_direction: ["outbound", "inbound"],
     },
   },
-} as const;
+} as const

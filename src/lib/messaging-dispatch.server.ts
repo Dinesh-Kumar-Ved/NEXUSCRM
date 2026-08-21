@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getRequestUrl } from "@tanstack/react-start/server";
 
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { Database } from "@/integrations/supabase/types";
 import { personalize, type ClientRecord } from "./crm";
 import { placeCall, sendEmail, sendSms, sendWhatsApp, type SendResult } from "./messaging.server";
@@ -216,6 +217,80 @@ export async function deliverToClient(
     result,
   });
 
+  if (args.channel === "email" && result.ok && client.workspace_id) {
+    const now = new Date();
+    const messageId = result.providerMessageId ?? `outbound_${Date.now()}`;
+    const threadId = (result as any).threadId ?? messageId;
+
+    const processedAttachments: Array<{
+      filename: string;
+      mimeType: string;
+      size: number;
+      storagePath?: string;
+    }> = [];
+
+    if (args.attachments && args.attachments.length > 0) {
+      for (const att of args.attachments) {
+        const cleanLen = att.contentBase64.replace(/\s+/g, "").replace(/=+$/, "").length;
+        const sizeBytes = Math.floor((cleanLen * 3) / 4);
+        const safeName = att.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+        const storagePath = `${client.workspace_id}/${messageId}/${safeName}`;
+
+        try {
+          const buffer = Buffer.from(att.contentBase64, "base64");
+          await supabaseAdmin.storage
+            .from("email-attachments")
+            .upload(storagePath, buffer, {
+              contentType: att.mimeType,
+              upsert: true,
+            });
+
+          processedAttachments.push({
+            filename: att.filename,
+            mimeType: att.mimeType,
+            size: sizeBytes,
+            storagePath,
+          });
+        } catch (attErr) {
+          console.warn("Could not upload attachment to storage:", attErr);
+          processedAttachments.push({
+            filename: att.filename,
+            mimeType: att.mimeType,
+            size: sizeBytes,
+          });
+        }
+      }
+    }
+
+    try {
+      await (supabaseAdmin as unknown as any)
+        .from("email_messages")
+        .insert({
+          workspace_id: client.workspace_id,
+          client_id: client.id,
+          thread_id: threadId,
+          provider_message_id: messageId,
+          rfc_message_id: "",
+          direction: "outbound",
+          from_email: "me",
+          from_name: "You",
+          to_email: to,
+          cc: args.cc ? args.cc.join(", ") : null,
+          bcc: args.bcc ? args.bcc.join(", ") : null,
+          subject: subject || "(No Subject)",
+          body_text: body,
+          body_html: args.html ? personalize(args.html, client) : `<p>${body.replace(/\n/g, "<br/>")}</p>`,
+          attachments: processedAttachments,
+          in_reply_to: args.inReplyTo ?? null,
+          references: args.references ?? null,
+          sent_at: now,
+          received_at: now,
+        });
+    } catch (insertErr) {
+      console.error("[MESSAGING_DISPATCH] Failed to record outbound email in email_messages:", insertErr);
+    }
+  }
+
   return {
     ok: result.ok,
     error: result.error ?? null,
@@ -232,6 +307,7 @@ export async function runCampaign(
     body: string;
     campaignName: string;
     templateId?: string | undefined;
+    attachments?: EmailAttachment[] | undefined;
   },
 ) {
   const clients = await loadClients(args.supabase, args.clientIds);
@@ -250,6 +326,26 @@ export async function runCampaign(
     .select("id")
     .single();
   if (campaignError) throw new Error(campaignError.message);
+
+  // If campaign attachments are provided, store records in campaign_attachments table
+  if (args.attachments && args.attachments.length > 0 && clients[0]?.workspace_id) {
+    const workspaceId = clients[0].workspace_id;
+    for (const att of args.attachments) {
+      const cleanLen = att.contentBase64.replace(/\s+/g, "").replace(/=+$/, "").length;
+      const sizeBytes = Math.floor((cleanLen * 3) / 4);
+      try {
+        await (args.supabase as any).from("campaign_attachments").insert({
+          workspace_id: workspaceId,
+          campaign_id: campaign.id,
+          file_name: att.filename,
+          file_size: sizeBytes,
+          mime_type: att.mimeType,
+        });
+      } catch (attErr) {
+        console.warn("Could not record campaign attachment:", attErr);
+      }
+    }
+  }
 
   let sent = 0;
   let failed = 0;
@@ -313,7 +409,7 @@ export async function runCampaign(
     const subject = personalize(args.subject ?? "", client);
 
     console.log(
-      `[BROADCAST_DISPATCH] Starting send | source=${source} | Campaign: ${campaign.id} | Client: ${client.id} | Recipient: ${to} | Subject: "${subject || "Update from your account team"}" | messageLength=${body.length}`,
+      `[BROADCAST_DISPATCH] Starting send | source=${source} | Campaign: ${campaign.id} | Client: ${client.id} | Recipient: ${to} | Subject: "${subject || "Update from your account team"}" | messageLength=${body.length} | attachments=${args.attachments?.length ?? 0}`,
     );
 
     const result = await deliver(
@@ -323,6 +419,9 @@ export async function runCampaign(
       to,
       subject || "Update from your account team",
       body,
+      {
+        attachments: args.attachments,
+      },
     );
 
     if (result.ok) {

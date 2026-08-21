@@ -162,18 +162,59 @@ export async function action({ request }: ActionFunctionArgs) {
     return json({ error: sendResult.error ?? "Failed to send Gmail message" }, { status: 500 });
   }
 
+  const msgId = sendResult.messageId ?? `out_${Date.now()}`;
+  const processedOutboundAttachments: Array<{
+    filename: string;
+    mimeType: string;
+    size: number;
+    storagePath?: string;
+  }> = [];
+
+  if (attachments && attachments.length > 0) {
+    for (const att of attachments) {
+      const cleanLen = att.contentBase64.replace(/\s+/g, "").replace(/=+$/, "").length;
+      const sizeBytes = Math.floor((cleanLen * 3) / 4);
+      const safeName = att.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const storagePath = `${workspaceId}/${msgId}/${safeName}`;
+
+      try {
+        const buffer = Buffer.from(att.contentBase64, "base64");
+        await supabaseAdmin.storage
+          .from("email-attachments")
+          .upload(storagePath, buffer, {
+            contentType: att.mimeType,
+            upsert: true,
+          });
+        processedOutboundAttachments.push({
+          filename: att.filename,
+          mimeType: att.mimeType,
+          size: sizeBytes,
+          storagePath,
+        });
+      } catch (attErr) {
+        console.warn("Could not upload outbound attachment to storage:", attErr);
+        processedOutboundAttachments.push({
+          filename: att.filename,
+          mimeType: att.mimeType,
+          size: sizeBytes,
+        });
+      }
+    }
+  }
+
   await (supabaseAdmin as unknown as any).from("email_messages").insert({
     workspace_id: workspaceId,
     client_id: String(clientId),
     thread_id: String(threadId),
-    provider_message_id: sendResult.messageId ?? "",
+    provider_message_id: sendResult.messageId ?? msgId,
     rfc_message_id: "",
     direction: "outbound",
     from_email: fromEmail,
     to_email: toEmail,
     subject,
     body_text: body,
-    body_html: typeof html === "string" ? html : "",
+    body_html: typeof html === "string" ? html : `<p>${body.replace(/\n/g, "<br/>")}</p>`,
+    attachments: processedOutboundAttachments,
     in_reply_to: inReplyTo ?? null,
     references: references ?? null,
     sent_at: new Date(),
@@ -188,7 +229,7 @@ export async function action({ request }: ActionFunctionArgs) {
   return json({
     ok: true,
     messageId: sendResult.messageId,
-    attachments: attachments.length,
+    attachments: processedOutboundAttachments.length,
   });
 }
 
