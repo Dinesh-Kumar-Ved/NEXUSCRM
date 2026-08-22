@@ -169,9 +169,7 @@ export type Database = {
           status: Database["public"]["Enums"]["deal_status"]
           tags: string[]
           updated_at: string
-          website: string | null
           whatsapp: string | null
-          workspace_id: string | null
         }
         Insert: {
           assigned_to?: string | null
@@ -191,9 +189,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["deal_status"]
           tags?: string[]
           updated_at?: string
-          website?: string | null
           whatsapp?: string | null
-          workspace_id?: string | null
         }
         Update: {
           assigned_to?: string | null
@@ -213,19 +209,9 @@ export type Database = {
           status?: Database["public"]["Enums"]["deal_status"]
           tags?: string[]
           updated_at?: string
-          website?: string | null
           whatsapp?: string | null
-          workspace_id?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "clients_workspace_id_fkey"
-            columns: ["workspace_id"]
-            isOneToOne: false
-            referencedRelation: "workspaces"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       documents: {
         Row: {
@@ -264,96 +250,6 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      email_messages: {
-        Row: {
-          attachments: Json
-          bcc: string | null
-          body_html: string | null
-          body_text: string | null
-          cc: string | null
-          client_id: string | null
-          created_at: string | null
-          direction: string
-          from_email: string
-          from_name: string | null
-          id: string
-          in_reply_to: string | null
-          provider_message_id: string
-          received_at: string | null
-          references: string | null
-          rfc_message_id: string
-          sent_at: string | null
-          subject: string | null
-          thread_id: string
-          to_email: string
-          updated_at: string | null
-          workspace_id: string
-        }
-        Insert: {
-          attachments?: Json
-          bcc?: string | null
-          body_html?: string | null
-          body_text?: string | null
-          cc?: string | null
-          client_id?: string | null
-          created_at?: string | null
-          direction: string
-          from_email: string
-          from_name?: string | null
-          id?: string
-          in_reply_to?: string | null
-          provider_message_id: string
-          received_at?: string | null
-          references?: string | null
-          rfc_message_id?: string
-          sent_at?: string | null
-          subject?: string | null
-          thread_id: string
-          to_email: string
-          updated_at?: string | null
-          workspace_id: string
-        }
-        Update: {
-          attachments?: Json
-          bcc?: string | null
-          body_html?: string | null
-          body_text?: string | null
-          cc?: string | null
-          client_id?: string | null
-          created_at?: string | null
-          direction?: string
-          from_email?: string
-          from_name?: string | null
-          id?: string
-          in_reply_to?: string | null
-          provider_message_id?: string
-          received_at?: string | null
-          references?: string | null
-          rfc_message_id?: string
-          sent_at?: string | null
-          subject?: string | null
-          thread_id?: string
-          to_email?: string
-          updated_at?: string | null
-          workspace_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "email_messages_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "clients"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "email_messages_workspace_id_fkey"
-            columns: ["workspace_id"]
-            isOneToOne: false
-            referencedRelation: "workspaces"
             referencedColumns: ["id"]
           },
         ]
@@ -575,162 +471,21 @@ export type Database = {
       user_roles: {
         Row: {
           created_at: string
+          id: string
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Insert: {
           created_at?: string
+          id?: string
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Update: {
           created_at?: string
+          id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
-        }
-        Relationships: []
-      }
-      workspace_integrations: {
-        Row: {
-          config: Json
-          created_at: string
-          details: Json
-          encrypted_refresh_token: Json | null
-          id: string
-          is_active: boolean
-          last_test_error: string | null
-          last_tested_at: string | null
-          provider: string
-          provider_type: string
-          status: string
-          updated_at: string
-          workspace_id: string
-        }
-        Insert: {
-          config?: Json
-          created_at?: string
-          details?: Json
-          encrypted_refresh_token?: Json | null
-          id?: string
-          is_active?: boolean
-          last_test_error?: string | null
-          last_tested_at?: string | null
-          provider: string
-          provider_type: string
-          status?: string
-          updated_at?: string
-          workspace_id: string
-        }
-        Update: {
-          config?: Json
-          created_at?: string
-          details?: Json
-          encrypted_refresh_token?: Json | null
-          id?: string
-          is_active?: boolean
-          last_test_error?: string | null
-          last_tested_at?: string | null
-          provider?: string
-          provider_type?: string
-          status?: string
-          updated_at?: string
-          workspace_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "workspace_integrations_workspace_id_fkey"
-            columns: ["workspace_id"]
-            isOneToOne: false
-            referencedRelation: "workspaces"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      workspace_members: {
-        Row: {
-          created_at: string
-          role: Database["public"]["Enums"]["app_role"]
-          user_id: string
-          workspace_id: string
-        }
-        Insert: {
-          created_at?: string
-          role?: Database["public"]["Enums"]["app_role"]
-          user_id: string
-          workspace_id: string
-        }
-        Update: {
-          created_at?: string
-          role?: Database["public"]["Enums"]["app_role"]
-          user_id?: string
-          workspace_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "workspace_members_workspace_id_fkey"
-            columns: ["workspace_id"]
-            isOneToOne: false
-            referencedRelation: "workspaces"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      workspace_oauth_states: {
-        Row: {
-          created_at: string
-          expires_at: string
-          id: string
-          provider: string
-          state: string
-          user_id: string
-          workspace_id: string
-        }
-        Insert: {
-          created_at?: string
-          expires_at?: string
-          id?: string
-          provider?: string
-          state: string
-          user_id: string
-          workspace_id: string
-        }
-        Update: {
-          created_at?: string
-          expires_at?: string
-          id?: string
-          provider?: string
-          state?: string
-          user_id?: string
-          workspace_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "workspace_oauth_states_workspace_id_fkey"
-            columns: ["workspace_id"]
-            isOneToOne: false
-            referencedRelation: "workspaces"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      workspaces: {
-        Row: {
-          created_at: string
-          created_by: string
-          id: string
-          name: string
-        }
-        Insert: {
-          created_at?: string
-          created_by?: string
-          id?: string
-          name: string
-        }
-        Update: {
-          created_at?: string
-          created_by?: string
-          id?: string
-          name?: string
         }
         Relationships: []
       }
@@ -744,10 +499,6 @@ export type Database = {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
-        Returns: boolean
-      }
-      is_workspace_member: {
-        Args: { _user_id?: string; _workspace_id: string }
         Returns: boolean
       }
     }
