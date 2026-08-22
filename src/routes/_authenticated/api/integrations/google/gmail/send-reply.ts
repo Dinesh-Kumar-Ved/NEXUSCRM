@@ -49,8 +49,8 @@ function validateAttachments(raw: unknown): EmailAttachment[] | string {
 
 async function resolveWorkspaceAndUser(request: Request): Promise<{ workspaceId: string; userId: string } | { error: Response }> {
   const cookie = request.headers.get("cookie") ?? "";
-  const SUPABASE_URL = process.env["SUPABASE_URL"];
-  const SUPABASE_PUBLISHABLE_KEY = process.env["SUPABASE_PUBLISHABLE_KEY"];
+  const SUPABASE_URL = process.env["SUPABASE_URL"] || process.env["VITE_SUPABASE_URL"];
+  const SUPABASE_PUBLISHABLE_KEY = process.env["SUPABASE_PUBLISHABLE_KEY"] || process.env["VITE_SUPABASE_PUBLISHABLE_KEY"];
   if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
     return { error: json({ error: "Server missing Supabase env vars" }, { status: 500 }) };
   }

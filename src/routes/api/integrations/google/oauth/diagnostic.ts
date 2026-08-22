@@ -118,8 +118,8 @@ export const Route = createFileRoute("/api/integrations/google/oauth/diagnostic"
         const googleEncryptionKey = process.env["GOOGLE_TOKEN_ENCRYPTION_KEY"]?.trim() || "";
 
         // Supabase env checks
-        const supabaseUrl = process.env["SUPABASE_URL"]?.trim() || "";
-        const supabaseAnonKey = process.env["SUPABASE_PUBLISHABLE_KEY"]?.trim() || "";
+        const supabaseUrl = (process.env["SUPABASE_URL"] || process.env["VITE_SUPABASE_URL"])?.trim() || "";
+        const supabaseAnonKey = (process.env["SUPABASE_PUBLISHABLE_KEY"] || process.env["VITE_SUPABASE_PUBLISHABLE_KEY"])?.trim() || "";
         const supabaseServiceRoleKey = process.env["SUPABASE_SERVICE_ROLE_KEY"]?.trim() || "";
 
         // Check if the Client ID looks valid (not a mock and has valid format)

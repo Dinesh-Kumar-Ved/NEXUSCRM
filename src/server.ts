@@ -105,7 +105,7 @@ function validateEnvOnce() {
 
   // Supabase server-side check
   const supabaseServiceRoleKey = process.env["SUPABASE_SERVICE_ROLE_KEY"];
-  const supabaseUrl = process.env["SUPABASE_URL"];
+  const supabaseUrl = process.env["SUPABASE_URL"] || process.env["VITE_SUPABASE_URL"];
   if (!supabaseUrl || supabaseUrl.trim().length === 0) {
     console.warn("Supabase configuration missing: SUPABASE_URL");
   } else if (!supabaseServiceRoleKey || supabaseServiceRoleKey.trim().length === 0) {
