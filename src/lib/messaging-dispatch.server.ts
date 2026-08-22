@@ -49,6 +49,10 @@ async function deliver(
     references?: string | undefined;
   },
 ): Promise<SendResult> {
+  console.log(
+    `[DELIVER_DISPATCH] deliver() called | channel=${channel} | workspaceId=${workspaceId ?? "NULL"} | recipient=${to}`,
+  );
+
   if (workspaceId) {
     const { getWorkspaceIntegrationConfig, sendMetaWhatsAppMessage, sendEmailWithConfig } =
       await import("./integrations.server");
@@ -75,9 +79,31 @@ async function deliver(
 
     if (channel === "email") {
       const em = await getWorkspaceIntegrationConfig(supabase, workspaceId, "email");
-      if (em?.config && (em.config as any).fromEmail) {
+      console.log(
+        `[DELIVER_DISPATCH] Email integration lookup for workspace ${workspaceId}:`,
+        {
+          found: Boolean(em),
+          provider: em?.provider ?? "none",
+          status: em?.status ?? "none",
+          hasConfig: Boolean(em?.config),
+        },
+      );
+
+      if (em?.config) {
+        const fromEmail =
+          (em.config as Record<string, any>)["fromEmail"] ||
+          (em.details as Record<string, any> | undefined)?.["fromEmail"] ||
+          (em.details as Record<string, any> | undefined)?.["connectedEmail"] ||
+          "";
+
+        const emailConfig = {
+          ...em.config,
+          fromEmail,
+          workspaceId,
+        };
+
         const res = await sendEmailWithConfig({
-          config: em.config as any,
+          config: emailConfig as any,
           to,
           cc: options?.cc,
           bcc: options?.bcc,
@@ -89,6 +115,14 @@ async function deliver(
           inReplyTo: options?.inReplyTo,
           references: options?.references,
         });
+
+        console.log(`[DELIVER_DISPATCH] sendEmailWithConfig outcome for ${to}:`, {
+          ok: res.ok,
+          provider: em.provider,
+          error: res.error ?? null,
+          messageId: res.messageId ?? null,
+        });
+
         return {
           ok: res.ok,
           provider: em.provider,
@@ -96,11 +130,18 @@ async function deliver(
           providerMessageId: res.messageId,
           error: res.error,
         };
+      } else {
+        console.warn(
+          `[DELIVER_DISPATCH] Workspace ${workspaceId} has no active email integration configured in DB.`,
+        );
       }
     }
   }
 
   // Fallback to default env vars
+  console.log(
+    `[DELIVER_DISPATCH] Attempting fallback system provider for channel ${channel} (workspaceId: ${workspaceId ?? "NULL"})...`,
+  );
   if (channel === "email") return sendEmail({ to, subject, text });
   if (channel === "sms") return sendSms({ to, text });
   return sendWhatsApp({ to, text });

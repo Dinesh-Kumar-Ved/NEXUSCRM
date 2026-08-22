@@ -271,15 +271,35 @@ export async function sendEmailWithConfig(params: {
   if (config.provider === "gmail") {
     const workspaceId = config.workspaceId;
     if (!workspaceId) {
+      console.error("[GMAIL_DISPATCH] Missing workspaceId in config payload.");
       return {
         ok: false,
         error: "Workspace ID is required to authenticate Gmail message dispatch.",
       };
     }
 
+    // Check required Vercel production environment variables explicitly
+    const googleClientId = process.env["GOOGLE_CLIENT_ID"]?.trim();
+    const googleClientSecret = process.env["GOOGLE_CLIENT_SECRET"]?.trim();
+    const encryptionKey = process.env["GOOGLE_TOKEN_ENCRYPTION_KEY"]?.trim();
+
+    const missingVars: string[] = [];
+    if (!googleClientId) missingVars.push("GOOGLE_CLIENT_ID");
+    if (!googleClientSecret) missingVars.push("GOOGLE_CLIENT_SECRET");
+    if (!encryptionKey) missingVars.push("GOOGLE_TOKEN_ENCRYPTION_KEY");
+
+    if (missingVars.length > 0) {
+      const errMessage = `Server missing required environment variable(s) for Gmail dispatch: ${missingVars.join(", ")}. Please configure them in Vercel Environment Variables.`;
+      console.error(`[GMAIL_DISPATCH] Configuration Error: ${errMessage}`);
+      return {
+        ok: false,
+        error: errMessage,
+      };
+    }
+
     try {
       // Retrieve integration credentials server-side using service role
-      const { data: integration, error: dbError } = await supabaseAdmin
+      const { data: integration, error: dbError } = await (supabaseAdmin as any)
         .from("workspace_integrations")
         .select("*")
         .eq("workspace_id", workspaceId)
@@ -287,16 +307,20 @@ export async function sendEmailWithConfig(params: {
         .maybeSingle();
 
       if (dbError || !integration) {
+        const msg = dbError
+          ? `Database error looking up Gmail integration: ${dbError.message}`
+          : "Gmail integration not found for this workspace. Please connect your Gmail account in Settings.";
+        console.error(`[GMAIL_DISPATCH] Integration lookup failed for workspace ${workspaceId}: ${msg}`);
         return {
           ok: false,
-          error:
-            "Gmail integration not found for this workspace. Please connect your Gmail account in Settings.",
+          error: msg,
         };
       }
 
       const encryptedToken =
         integration.encrypted_refresh_token as unknown as EncryptedPayload | null;
       if (!encryptedToken) {
+        console.error(`[GMAIL_DISPATCH] Missing encrypted_refresh_token for workspace ${workspaceId}`);
         return {
           ok: false,
           error: "Gmail refresh token is missing. Please reconnect your Gmail account in Settings.",
@@ -308,14 +332,13 @@ export async function sendEmailWithConfig(params: {
       try {
         refreshToken = decryptToken(encryptedToken);
       } catch (decryptErr) {
+        const errMsg = decryptErr instanceof Error ? decryptErr.message : "Decryption failed";
         console.error(
-          "Failed to decrypt Gmail token:",
-          decryptErr instanceof Error ? decryptErr.message : "Decryption failed",
+          `[GMAIL_DISPATCH] Token decryption failed for workspace ${workspaceId}: ${errMsg}`,
         );
         return {
           ok: false,
-          error:
-            "Failed to decrypt Gmail credentials. Please reconnect your Gmail account in Settings.",
+          error: `Token decryption failed (${errMsg}). Please reconnect your Gmail account in Settings.`,
         };
       }
 
@@ -336,9 +359,10 @@ export async function sendEmailWithConfig(params: {
         } catch (refreshErr) {
           const errMsg =
             refreshErr instanceof Error ? refreshErr.message : "Gmail authorization expired.";
+          console.error(`[GMAIL_DISPATCH] Token refresh failed for workspace ${workspaceId}: ${errMsg}`);
           workspaceAccessTokenCache.delete(workspaceId);
           // Update status to error in DB
-          await supabaseAdmin
+          await (supabaseAdmin as any)
             .from("workspace_integrations")
             .update({
               status: "error",
@@ -388,6 +412,7 @@ export async function sendEmailWithConfig(params: {
       return result;
     } catch (err) {
       const errStr = err instanceof Error ? err.message : "Failed to send email via Gmail API.";
+      console.error(`[GMAIL_DISPATCH] Unexpected error sending email for workspace ${workspaceId}: ${errStr}`);
       return { ok: false, error: errStr };
     }
   }
@@ -598,7 +623,7 @@ export async function getWorkspaceIntegrationConfig(
   lastTestedAt: string | null;
   lastTestError: string | null;
 } | null> {
-  const { data } = await supabase
+  const { data } = await (supabase as any)
     .from("workspace_integrations")
     .select("*")
     .eq("workspace_id", workspaceId)

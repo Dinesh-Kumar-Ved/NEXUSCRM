@@ -43,14 +43,14 @@ export async function createGoogleAuthUrl(params: {
   const state = crypto.randomBytes(32).toString("hex");
 
   // Clean up any existing expired states
-  await supabaseAdmin
+  await (supabaseAdmin as any)
     .from("workspace_oauth_states")
     .delete()
     .lt("expires_at", new Date().toISOString());
 
   // Store the state with workspace and user binding (15 min TTL)
   const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
-  const { error: insertError } = await supabaseAdmin.from("workspace_oauth_states").insert({
+  const { error: insertError } = await (supabaseAdmin as any).from("workspace_oauth_states").insert({
     state,
     workspace_id: params.workspaceId,
     user_id: params.userId,

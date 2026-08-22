@@ -72,7 +72,7 @@ export const saveWhatsAppIntegration = createServerFn({ method: "POST" })
     const lastTestError = testResult.error ?? null;
 
     // Upsert into workspace_integrations table
-    const { error: upsertError } = await context.supabase.from("workspace_integrations").upsert(
+    const { error: upsertError } = await (context.supabase as any).from("workspace_integrations").upsert(
       {
         workspace_id: data.workspaceId,
         provider_type: "whatsapp",
@@ -137,7 +137,7 @@ export const testWhatsAppIntegration = createServerFn({ method: "POST" })
     });
 
     // Update status in DB
-    await context.supabase
+    await (context.supabase as any)
       .from("workspace_integrations")
       .update({
         status: testResult.ok ? "connected" : "error",
@@ -174,7 +174,7 @@ export const saveEmailIntegration = createServerFn({ method: "POST" })
     }
 
     // Upsert into workspace_integrations table
-    const { error: upsertError } = await context.supabase.from("workspace_integrations").upsert(
+    const { error: upsertError } = await (context.supabase as any).from("workspace_integrations").upsert(
       {
         workspace_id: data.workspaceId,
         provider_type: "email",
@@ -232,7 +232,7 @@ export const testEmailIntegration = createServerFn({ method: "POST" })
     });
 
     // Update status in DB
-    await context.supabase
+    await (context.supabase as any)
       .from("workspace_integrations")
       .update({
         status: testResult.ok ? "connected" : "error",
@@ -249,7 +249,7 @@ export const disconnectIntegration = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((input: unknown) => disconnectSchema.parse(input))
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase
+    const { error } = await (context.supabase as any)
       .from("workspace_integrations")
       .delete()
       .eq("workspace_id", data.workspaceId)

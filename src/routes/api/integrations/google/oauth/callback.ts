@@ -33,7 +33,7 @@ export const Route = createFileRoute("/api/integrations/google/oauth/callback")(
 
         try {
           // 1. Validate CSRF state from workspace_oauth_states
-          const { data: stateRecord, error: stateError } = await supabaseAdmin
+          const { data: stateRecord, error: stateError } = await (supabaseAdmin as any)
             .from("workspace_oauth_states")
             .select("*")
             .eq("state", state)
@@ -48,7 +48,7 @@ export const Route = createFileRoute("/api/integrations/google/oauth/callback")(
 
           // Check expiration (15 min)
           if (new Date(stateRecord.expires_at).getTime() < Date.now()) {
-            await supabaseAdmin.from("workspace_oauth_states").delete().eq("state", state);
+            await (supabaseAdmin as any).from("workspace_oauth_states").delete().eq("state", state);
             return Response.redirect(
               `${redirectBase}?error=${encodeURIComponent("OAuth session expired. Please connect Gmail again.")}`,
               302,
@@ -56,7 +56,7 @@ export const Route = createFileRoute("/api/integrations/google/oauth/callback")(
           }
 
           // Delete state immediately to prevent CSRF replay
-          await supabaseAdmin.from("workspace_oauth_states").delete().eq("state", state);
+          await (supabaseAdmin as any).from("workspace_oauth_states").delete().eq("state", state);
 
           const workspaceId = stateRecord.workspace_id;
 
@@ -72,7 +72,7 @@ export const Route = createFileRoute("/api/integrations/google/oauth/callback")(
           const { emailAddress } = await fetchGmailProfile(tokenResult.accessToken);
 
           // Query any existing integration for this workspace to detect account switching
-          const { data: existingIntegration } = await supabaseAdmin
+          const { data: existingIntegration } = await (supabaseAdmin as any)
             .from("workspace_integrations")
             .select("*")
             .eq("workspace_id", workspaceId)
@@ -106,7 +106,7 @@ export const Route = createFileRoute("/api/integrations/google/oauth/callback")(
           }
 
           // 5. Update/replace workspace_integrations with the newly authorized account
-          const { error: upsertError } = await supabaseAdmin
+          const { error: upsertError } = await (supabaseAdmin as any)
             .from("workspace_integrations")
             .upsert(
               {

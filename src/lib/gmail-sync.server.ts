@@ -34,7 +34,7 @@ export interface GmailSyncResult {
  * Retrieves the Gmail access token for a workspace, refreshing if needed.
  */
 export async function getAccessTokenForWorkspace(workspaceId: string): Promise<string> {
-  const { data: integration, error } = await supabaseAdmin
+  const { data: integration, error } = await (supabaseAdmin as any)
     .from("workspace_integrations")
     .select("encrypted_refresh_token, details")
     .eq("workspace_id", workspaceId)
@@ -513,7 +513,7 @@ export async function syncGmailForWorkspace(workspaceId: string): Promise<GmailS
   }
 
   // Update integration last_tested_at to track sync time
-  await supabase
+  await (supabase as any)
     .from("workspace_integrations")
     .update({
       last_tested_at: new Date().toISOString(),
