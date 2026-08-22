@@ -169,7 +169,9 @@ export type Database = {
           status: Database["public"]["Enums"]["deal_status"]
           tags: string[]
           updated_at: string
+          website: string | null
           whatsapp: string | null
+          workspace_id: string
         }
         Insert: {
           assigned_to?: string | null
@@ -189,7 +191,9 @@ export type Database = {
           status?: Database["public"]["Enums"]["deal_status"]
           tags?: string[]
           updated_at?: string
+          website?: string | null
           whatsapp?: string | null
+          workspace_id: string
         }
         Update: {
           assigned_to?: string | null
@@ -209,9 +213,19 @@ export type Database = {
           status?: Database["public"]["Enums"]["deal_status"]
           tags?: string[]
           updated_at?: string
+          website?: string | null
           whatsapp?: string | null
+          workspace_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "clients_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       documents: {
         Row: {
@@ -489,6 +503,56 @@ export type Database = {
         }
         Relationships: []
       }
+      workspace_members: {
+        Row: {
+          created_at: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+          workspace_id: string
+        }
+        Insert: {
+          created_at?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+          workspace_id: string
+        }
+        Update: {
+          created_at?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_members_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspaces: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          id?: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -499,6 +563,10 @@ export type Database = {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
+        Returns: boolean
+      }
+      is_workspace_member: {
+        Args: { _user_id?: string; _workspace_id: string }
         Returns: boolean
       }
     }
