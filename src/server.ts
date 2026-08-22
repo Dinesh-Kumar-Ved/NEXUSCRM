@@ -110,9 +110,8 @@ function validateEnvOnce() {
     console.warn("Supabase configuration missing: SUPABASE_URL");
   } else if (!supabaseServiceRoleKey || supabaseServiceRoleKey.trim().length === 0) {
     console.warn(
-      "Supabase service role key missing: SUPABASE_SERVICE_ROLE_KEY. " +
-      "Add it to .env (local dev) or set it as a platform secret in Lovable Cloud. " +
-      "Obtain from: https://supabase.com/dashboard/project/eomsoplysdcdguegsror/settings/api",
+      "Backend service role key missing: SUPABASE_SERVICE_ROLE_KEY. " +
+      "It is injected by the managed backend at runtime; if absent, re-bind the backend connection.",
     );
   } else {
     console.info("Supabase server configuration: OK");
