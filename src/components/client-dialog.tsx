@@ -94,12 +94,14 @@ export function ClientDialog({
   client,
   workspaceId,
   onSaved,
+  initialStatus,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   client?: ClientRecord | null;
   workspaceId: string | null;
   onSaved?: (client: ClientRecord) => void | Promise<void>;
+  initialStatus?: DealStatus;
 }) {
   const [form, setForm] = useState(EMPTY);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
@@ -123,9 +125,9 @@ export function ClientDialog({
           notes: client.notes ?? "",
           assigned_to: client.assigned_to ?? "unassigned",
         }
-        : EMPTY,
+        : { ...EMPTY, status: initialStatus ?? EMPTY.status },
     );
-  }, [open, client]);
+  }, [open, client, initialStatus]);
 
   const save = useMutation({
     mutationFn: async () => {
