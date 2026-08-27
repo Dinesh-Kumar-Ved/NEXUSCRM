@@ -110,19 +110,19 @@ export function ClientDialog({
     setForm(
       client
         ? {
-            name: client.name,
-            company: client.company ?? "",
-            email: client.email ?? "",
-            phone: client.phone ?? "",
-            whatsapp: client.whatsapp ?? "",
-            website: client.website ?? "",
-            source: client.source ?? "Referral",
-            tags: client.tags.join(", "),
-            status: client.status,
-            deal_value: String(client.deal_value ?? 0),
-            notes: client.notes ?? "",
-            assigned_to: client.assigned_to ?? "unassigned",
-          }
+          name: client.name,
+          company: client.company ?? "",
+          email: client.email ?? "",
+          phone: client.phone ?? "",
+          whatsapp: client.whatsapp ?? "",
+          website: client.website ?? "",
+          source: client.source ?? "Referral",
+          tags: client.tags.join(", "),
+          status: client.status,
+          deal_value: String(client.deal_value ?? 0),
+          notes: client.notes ?? "",
+          assigned_to: client.assigned_to ?? "unassigned",
+        }
         : EMPTY,
     );
   }, [open, client]);
@@ -326,7 +326,7 @@ export function ClientDialog({
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Deal value (USD)">
+          <Field label="Deal value (INR)">
             <Input
               type="number"
               min="0"
