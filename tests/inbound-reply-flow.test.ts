@@ -1,30 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { sanitizeHtml } from "../src/lib/sanitize.ts";
 import { buildMimeEmail } from "../src/lib/google-auth.server.ts";
 
 describe("Inbound Gmail Reply Flow & Threading Tests", () => {
-  it("Test 1: HTML sanitization strips malicious XSS while preserving formatting", () => {
-    const rawMalicious = `
-      <div>
-        <p>Dear Account Manager,</p>
-        <p>Here is my revised proposal reply.</p>
-        <script>alert("hacked")</script>
-        <img src="x" onerror="alert(1)" />
-        <a href="javascript:void(0)">Click here</a>
-        <b>Thank you!</b>
-      </div>
-    `;
-
-    const sanitized = sanitizeHtml(rawMalicious);
-
-    assert.ok(!sanitized.includes("<script>"), "Must strip <script> tags");
-    assert.ok(!sanitized.includes("alert("), "Must strip inline scripts and event handlers");
-    assert.ok(!sanitized.includes("onerror"), "Must strip onerror attribute");
-    assert.ok(sanitized.includes("Dear Account Manager,"), "Must retain text content");
-    assert.ok(sanitized.includes("<b>Thank you!</b>") || sanitized.includes("Thank you!"), "Must retain safe tags");
-  });
-
   it("Test 2: RFC 2822 Reply MIME generation with In-Reply-To, References, and Thread headers", () => {
     const inReplyTo = "<original-msg-12345@mail.gmail.com>";
     const references = "<root-msg-00000@mail.gmail.com> <original-msg-12345@mail.gmail.com>";

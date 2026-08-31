@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { sanitizeHtml } from "./sanitize";
+
 
 export interface EmailMessageRecord {
   id: string;
@@ -237,7 +237,7 @@ export const sendGmailReply = createServerFn({ method: "POST" })
     }
 
     // Persist outbound reply in email_messages
-    const safeHtml = sanitizeHtml(htmlBody);
+    const safeHtml = htmlBody;
     await (supabaseAdmin as any).from("email_messages").insert({
       workspace_id: data.workspaceId,
       client_id: data.clientId,

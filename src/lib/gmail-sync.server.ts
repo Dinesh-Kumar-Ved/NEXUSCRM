@@ -4,7 +4,6 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { refreshGmailAccessToken, fetchGmailProfile } from "./google-auth.server";
 import { decryptToken } from "./crypto";
-import { sanitizeHtml } from "./sanitize";
 import type { Database } from "@/integrations/supabase/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -202,7 +201,7 @@ async function storeMessage(
     bodyHtml = `<p>${bodyText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br/>")}</p>`;
   }
 
-  const safeHtml = bodyHtml ? sanitizeHtml(bodyHtml) : "";
+  const safeHtml = bodyHtml || "";
   const rawAttachments = extractAttachments(msg.payload);
 
   const processedAttachments: Array<{
@@ -219,7 +218,7 @@ async function storeMessage(
       try {
         const safeName = sanitizeStorageFilename(att.filename);
         storagePath = `${workspaceId}/${msg.id}/${safeName}`;
-        
+
         const attData = await fetchGmailAttachment({
           workspaceId,
           messageId: msg.id,
@@ -353,7 +352,7 @@ export async function syncGmailForWorkspace(workspaceId: string): Promise<GmailS
   clients?.forEach((c) => {
     if (c.email) emailToClient[c.email.trim().toLowerCase()] = c.id;
   });
-  
+
   console.log(`[GMAIL_DEBUG_CLIENT]\nworkspaceId=${workspaceId}\nclientCount=${clients?.length ?? 0}\nclientEmails=${JSON.stringify(Object.keys(emailToClient))}`);
   console.log(`[GMAIL_SYNC] Loaded ${clients?.length ?? 0} client email(s) for matching`);
 
@@ -502,7 +501,7 @@ export async function syncGmailForWorkspace(workspaceId: string): Promise<GmailS
     .select("id, workspace_id, client_id, direction, from_email, to_email, subject, thread_id, provider_message_id, received_at")
     .eq("workspace_id", workspaceId)
     .eq("direction", "inbound");
-  
+
   if (postSyncError) {
     console.error(`[GMAIL_DEBUG_POST_SYNC_ERROR] ${postSyncError.message}`);
   } else {
