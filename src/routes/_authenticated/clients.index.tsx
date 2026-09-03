@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Mail, MessageSquare, Plus, Search, Trash2 } from "lucide-react";
@@ -7,6 +8,7 @@ import { Mail, MessageSquare, Plus, Search, Trash2 } from "lucide-react";
 import { BulkSendMessageDialog } from "@/components/bulk-send-message-dialog";
 import { ClientDialog } from "@/components/client-dialog";
 import { SendMessageDialog } from "@/components/send-message-dialog";
+import { deleteBulkClientsFn, deleteClientFn } from "@/lib/clients.functions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -68,6 +70,9 @@ function ClientsPage() {
   const [selectedClientIds, setSelectedClientIds] = useState<Set<string>>(new Set());
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
   const [bulkSendDialogOpen, setBulkSendDialogOpen] = useState(false);
+
+  const deleteClientServerFn = useServerFn(deleteClientFn);
+  const deleteBulkClientsServerFn = useServerFn(deleteBulkClientsFn);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
@@ -140,14 +145,15 @@ function ClientsPage() {
     setIsDeleting(true);
     const targetClient = deleteClient;
     try {
-      const { error } = await supabase
-        .from("clients")
-        .delete()
-        .eq("id", targetClient.id)
-        .eq("workspace_id", workspaceId);
+      const result = await deleteClientServerFn({
+        data: {
+          clientId: targetClient.id,
+          workspaceId,
+        },
+      });
 
-      if (error) {
-        toast.error(`Failed to delete client: ${error.message}`);
+      if (!result.ok) {
+        toast.error(`Failed to delete client: ${result.error}`);
         return;
       }
 
@@ -164,22 +170,24 @@ function ClientsPage() {
   const removeBulkClients = async () => {
     if (selectedClientIds.size === 0 || !workspaceId) return;
     setIsDeleting(true);
+    const ids = Array.from(selectedClientIds);
     try {
-      const { error } = await supabase
-        .from("clients")
-        .delete()
-        .in("id", Array.from(selectedClientIds))
-        .eq("workspace_id", workspaceId);
+      const result = await deleteBulkClientsServerFn({
+        data: {
+          clientIds: ids,
+          workspaceId,
+        },
+      });
 
-      if (error) {
-        toast.error(`Failed to delete clients: ${error.message}`);
+      if (!result.ok) {
+        toast.error(`Failed to delete clients: ${result.error}`);
         return;
       }
 
       setBulkDeleteDialogOpen(false);
       setSelectedClientIds(new Set());
       await queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
-      toast.success(`Successfully deleted ${selectedClientIds.size} clients`);
+      toast.success(`Successfully deleted ${ids.length} clients`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete clients.");
     } finally {
