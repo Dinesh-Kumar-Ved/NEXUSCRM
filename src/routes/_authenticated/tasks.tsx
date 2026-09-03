@@ -93,10 +93,12 @@ export function TasksPage() {
 
   const tasksQuery = useQuery({
     queryKey: ["all-tasks", workspaceId],
+    enabled: Boolean(workspaceId),
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tasks")
         .select("*")
+        .eq("workspace_id", workspaceId!)
         .order("due_at", { ascending: true, nullsFirst: false });
       if (error) throw error;
       return (data ?? []) as TaskItem[];
@@ -297,6 +299,7 @@ export function TasksPage() {
        <CreateTaskModal
          open={dialogOpen}
          onOpenChange={setDialogOpen}
+         workspaceId={workspaceId}
          clients={clientsQuery.data ?? []}
          team={team ?? []}
          onCreated={() => {
@@ -445,12 +448,14 @@ function EditTaskModal({
 function CreateTaskModal({
   open,
   onOpenChange,
+  workspaceId,
   clients,
   team,
   onCreated,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  workspaceId: string | null;
   clients: ClientRecord[];
   team: Array<{ id: string; full_name: string | null; email: string | null }>;
   onCreated: () => void;
@@ -471,6 +476,7 @@ function CreateTaskModal({
     setSaving(true);
     try {
       const { error } = await supabase.from("tasks").insert({
+        workspace_id: workspaceId,
         title: title.trim(),
         client_id: clientId === "none" ? null : clientId,
         assigned_to: assignedTo === "unassigned" ? null : assignedTo,

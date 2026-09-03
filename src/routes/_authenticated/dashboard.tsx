@@ -4,6 +4,7 @@ import { CheckCircle2, Mail, TrendingUp, Users } from "lucide-react";
 
 import { StatusBadge } from "@/components/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAuth, useWorkspace } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import {
   PIPELINE_ORDER,
@@ -32,28 +33,52 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 });
 
 function DashboardPage() {
+  const { user } = useAuth();
+  const { data: workspace } = useWorkspace(user?.id);
+  const workspaceId = workspace?.workspace_id ?? null;
+
   const { data, isLoading } = useQuery({
-    queryKey: ["dashboard"],
+    queryKey: ["dashboard", workspaceId],
+    enabled: Boolean(workspaceId),
     queryFn: async () => {
       const weekAgo = new Date(Date.now() - 7 * 864e5).toISOString();
-      const [clients, messages, tasks] = await Promise.all([
-        supabase.from("clients").select("*").order("updated_at", { ascending: false }),
-        supabase
+
+      const { data: clientsData, error: clientsError } = await supabase
+        .from("clients")
+        .select("*")
+        .eq("workspace_id", workspaceId!)
+        .order("updated_at", { ascending: false });
+
+      if (clientsError) throw clientsError;
+      const clientList = (clientsData ?? []) as ClientRecord[];
+      const clientIds = clientList.map((c) => c.id);
+
+      let messagesThisWeek: Array<{ id: string; status: string; channel: string; created_at: string }> = [];
+      if (clientIds.length > 0) {
+        const { data: msgs } = await supabase
           .from("messages")
           .select("id, status, channel, created_at")
-          .gte("created_at", weekAgo),
-        supabase
+          .in("client_id", clientIds)
+          .gte("created_at", weekAgo);
+        messagesThisWeek = (msgs ?? []) as typeof messagesThisWeek;
+      }
+
+      let tasks: Array<{ id: string; title: string; due_at: string; client_id: string; completed: boolean }> = [];
+      if (clientIds.length > 0) {
+        const { data: taskData } = await supabase
           .from("tasks")
           .select("id, title, due_at, client_id, completed")
+          .in("client_id", clientIds)
           .eq("completed", false)
           .order("due_at", { ascending: true })
-          .limit(6),
-      ]);
-      if (clients.error) throw clients.error;
+          .limit(6);
+        tasks = (taskData ?? []) as typeof tasks;
+      }
+
       return {
-        clients: (clients.data ?? []) as ClientRecord[],
-        messagesThisWeek: messages.data ?? [],
-        tasks: tasks.data ?? [],
+        clients: clientList,
+        messagesThisWeek,
+        tasks,
       };
     },
   });

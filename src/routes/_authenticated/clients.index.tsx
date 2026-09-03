@@ -97,11 +97,20 @@ function ClientsPage() {
         },
         () => void queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] }),
       )
-      .subscribe();
-    return () => {
-      void supabase.removeChannel(channel);
-    };
   }, [queryClient, workspaceId]);
+
+  const filteredClients = useMemo(() => {
+    return (clientsQuery.data ?? []).filter((client) => {
+      const matchesSearch =
+        !debouncedSearch ||
+        [client.name, client.company, client.email].some((value) =>
+          value?.toLowerCase().includes(debouncedSearch),
+        );
+      const matchesStatus = status === "all" || client.status === status;
+      const matchesSource = source === "all" || client.source === source;
+      return matchesSearch && matchesStatus && matchesSource;
+    });
+  }, [clientsQuery.data, debouncedSearch, source, status]);
 
   return (
     <div className="space-y-6">
