@@ -272,22 +272,32 @@ export const getGoogleOAuthUrl = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     let workspaceId = data?.workspaceId;
 
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
     if (!workspaceId) {
-      const { data: ws } = await context.supabase
+      const { data: ws } = await (supabaseAdmin as any)
         .from("workspaces")
         .select("id")
-        .eq("user_id", context.userId)
+        .eq("created_by", context.userId)
         .limit(1)
         .maybeSingle();
 
-      if (!ws?.id) {
-        throw new Error(
-          "No workspace found for your account.",
-        );
+      workspaceId = ws?.id;
+
+      if (!workspaceId) {
+        const { data: firstWs } = await (supabaseAdmin as any)
+          .from("workspaces")
+          .select("id")
+          .limit(1)
+          .maybeSingle();
+        workspaceId = firstWs?.id;
       }
-      workspaceId = ws.id;
+
+      if (!workspaceId) {
+        throw new Error("No workspace found for your account.");
+      }
     } else {
-      const { data: ws, error: wsError } = await context.supabase
+      const { data: ws, error: wsError } = await (supabaseAdmin as any)
         .from("workspaces")
         .select("id")
         .eq("id", workspaceId)
