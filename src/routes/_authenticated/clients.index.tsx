@@ -112,6 +112,37 @@ function ClientsPage() {
     });
   }, [clientsQuery.data, debouncedSearch, source, status]);
 
+  const openAdd = () => {
+    setSelectedClient(null);
+    setDialogOpen(true);
+  };
+
+  const openEdit = (client: ClientRecord) => {
+    setSelectedClient(client);
+    setDialogOpen(true);
+  };
+
+  const handleClientSaved = () => {
+    void queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
+  };
+
+  const [isDeleting, setIsDeleting] = useState(false);
+  const removeClient = async () => {
+    if (!deleteClient) return;
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase.from("clients").delete().eq("id", deleteClient.id);
+      if (error) throw error;
+      toast.success("Client deleted");
+      void queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
+      setDeleteClient(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete client");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
@@ -231,11 +262,6 @@ function ClientsPage() {
                 {STATUS_LABELS[client.status]}
               </Badge>
               <p className="text-sm text-muted-foreground">{client.source || "—"}</p>
-              <p className="truncate text-sm">
-                {client.assigned_to
-                  ? teamNames.get(client.assigned_to) || "Team member"
-                  : "Unassigned"}
-              </p>
               <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
                 <Button
                   variant="outline"
