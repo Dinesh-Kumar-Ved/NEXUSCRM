@@ -176,23 +176,22 @@ export function ClientDialog({
         console.log("insert payload:", insertPayload);
       }
 
-      const { data: membership, error: membershipError } = await supabase
-        .from("workspace_members")
-        .select("workspace_id, user_id, role")
-        .eq("workspace_id", workspaceId)
-        .eq("user_id", auth.user.id)
+      const { data: ws, error: wsError } = await supabase
+        .from("workspaces")
+        .select("id")
+        .eq("id", workspaceId)
         .maybeSingle();
       if (import.meta.env.DEV) {
-        console.log("workspace membership:", membership);
-        console.log("workspace membership error:", membershipError);
+        console.log("workspace record:", ws);
+        console.log("workspace error:", wsError);
       }
-      if (membershipError) {
+      if (wsError) {
         if (import.meta.env.DEV) console.groupEnd();
-        throw membershipError;
+        throw wsError;
       }
-      if (!membership) {
+      if (!ws) {
         if (import.meta.env.DEV) console.groupEnd();
-        throw new Error("The authenticated user is not a member of this workspace.");
+        throw new Error("Workspace not found.");
       }
 
       const { data, error } = await supabase

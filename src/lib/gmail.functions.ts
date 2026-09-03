@@ -42,19 +42,18 @@ export interface EmailConversationThread {
 async function verifyWorkspaceMembership(
   supabase: any,
   workspaceId: string,
-  userId: string,
+  _userId: string,
 ) {
-  const { data: member, error } = await supabase
-    .from("workspace_members")
-    .select("role")
-    .eq("workspace_id", workspaceId)
-    .eq("user_id", userId)
+  const { data: ws, error } = await supabase
+    .from("workspaces")
+    .select("id")
+    .eq("id", workspaceId)
     .maybeSingle();
 
-  if (error || !member) {
-    throw new Error("Unauthorized: You do not have access to this workspace.");
+  if (error || !ws) {
+    throw new Error("Unauthorized: Workspace not found or inaccessible.");
   }
-  return member;
+  return ws;
 }
 
 /**

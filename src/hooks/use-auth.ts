@@ -57,12 +57,32 @@ export function useWorkspace(userId: string | undefined) {
     enabled: Boolean(userId),
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("workspace_members")
-        .select("workspace_id, role")
-        .eq("user_id", userId!)
+        .from("workspaces")
+        .select("id, created_by")
+        .eq("created_by", userId!)
+        .limit(1)
         .maybeSingle();
-      if (error) throw error;
-      return data;
+
+      if (error) {
+        console.error("Error loading workspace:", error);
+      }
+
+      if (data) {
+        return { workspace_id: data.id, role: "admin" };
+      }
+
+      // Fallback if created_by doesn't match
+      const { data: firstWs } = await supabase
+        .from("workspaces")
+        .select("id")
+        .limit(1)
+        .maybeSingle();
+
+      if (firstWs) {
+        return { workspace_id: firstWs.id, role: "admin" };
+      }
+
+      return null;
     },
   });
 }

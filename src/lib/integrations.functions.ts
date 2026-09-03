@@ -273,29 +273,28 @@ export const getGoogleOAuthUrl = createServerFn({ method: "POST" })
     let workspaceId = data?.workspaceId;
 
     if (!workspaceId) {
-      const { data: member } = await context.supabase
-        .from("workspace_members")
-        .select("workspace_id")
+      const { data: ws } = await context.supabase
+        .from("workspaces")
+        .select("id")
         .eq("user_id", context.userId)
         .limit(1)
         .maybeSingle();
 
-      if (!member?.workspace_id) {
+      if (!ws?.id) {
         throw new Error(
-          "No workspace found for your account. Please create or join a workspace first.",
+          "No workspace found for your account.",
         );
       }
-      workspaceId = member.workspace_id;
+      workspaceId = ws.id;
     } else {
-      const { data: member, error: memberError } = await context.supabase
-        .from("workspace_members")
-        .select("role")
-        .eq("workspace_id", workspaceId)
-        .eq("user_id", context.userId)
+      const { data: ws, error: wsError } = await context.supabase
+        .from("workspaces")
+        .select("id")
+        .eq("id", workspaceId)
         .maybeSingle();
 
-      if (memberError || !member) {
-        throw new Error("Unauthorized: You are not a member of this workspace.");
+      if (wsError || !ws) {
+        throw new Error("Unauthorized: Workspace not found or inaccessible.");
       }
     }
 

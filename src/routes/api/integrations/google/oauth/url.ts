@@ -29,31 +29,29 @@ export const Route = createFileRoute("/api/integrations/google/oauth/url")({
             }
           }
 
-          // If no Authorization header, verify workspace membership or find valid admin member
+          // If no Authorization header, verify workspace exists
           if (userId) {
-            const { data: membership, error: memErr } = await supabaseAdmin
-              .from("workspace_members")
-              .select("role")
-              .eq("workspace_id", workspaceId)
-              .eq("user_id", userId)
+            const { data: ws, error: wsErr } = await supabaseAdmin
+              .from("workspaces")
+              .select("id, user_id")
+              .eq("id", workspaceId)
               .maybeSingle();
 
-            if (memErr || !membership) {
+            if (wsErr || !ws) {
               return new Response(
-                JSON.stringify({ error: "Forbidden: You are not a member of this workspace." }),
+                JSON.stringify({ error: "Forbidden: Workspace not found or unauthorized." }),
                 { status: 403, headers: { "Content-Type": "application/json" } },
               );
             }
           } else {
-            const { data: member } = await supabaseAdmin
-              .from("workspace_members")
+            const { data: ws } = await supabaseAdmin
+              .from("workspaces")
               .select("user_id")
-              .eq("workspace_id", workspaceId)
-              .limit(1)
+              .eq("id", workspaceId)
               .maybeSingle();
 
-            if (member?.user_id) {
-              userId = member.user_id;
+            if (ws?.user_id) {
+              userId = ws.user_id;
             }
           }
 
