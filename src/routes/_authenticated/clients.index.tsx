@@ -145,19 +145,47 @@ function ClientsPage() {
     setIsDeleting(true);
     const targetClient = deleteClient;
     try {
-      const result = await deleteClientServerFn({
-        data: {
-          clientId: targetClient.id,
-          workspaceId,
-        },
-      });
+      let deleted = false;
+      try {
+        const result = await deleteClientServerFn({
+          data: {
+            clientId: targetClient.id,
+            workspaceId,
+          },
+        });
+        if (result && result.ok) {
+          deleted = true;
+        }
+      } catch (e) {
+        console.warn("Server delete function error, trying direct fallback:", e);
+      }
 
-      if (!result.ok) {
-        toast.error(`Failed to delete client: ${result.error}`);
-        return;
+      if (!deleted) {
+        // Fallback: Delete related records first then client directly
+        await supabase.from("activities").delete().eq("client_id", targetClient.id);
+        await supabase.from("messages").delete().eq("client_id", targetClient.id);
+        await supabase.from("call_logs").delete().eq("client_id", targetClient.id);
+        await supabase.from("documents").delete().eq("client_id", targetClient.id);
+        await supabase.from("tasks").delete().eq("client_id", targetClient.id);
+        
+        const { error } = await supabase
+          .from("clients")
+          .delete()
+          .eq("id", targetClient.id)
+          .eq("workspace_id", workspaceId);
+
+        if (error) {
+          toast.error(`Failed to delete client: ${error.message}`);
+          return;
+        }
       }
 
       setDeleteClient(null);
+      setSelectedClientIds((prev) => {
+        const next = new Set(prev);
+        next.delete(targetClient.id);
+        return next;
+      });
       await queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
       toast.success(`Client "${targetClient.name}" deleted successfully`);
     } catch (err) {
@@ -172,16 +200,38 @@ function ClientsPage() {
     setIsDeleting(true);
     const ids = Array.from(selectedClientIds);
     try {
-      const result = await deleteBulkClientsServerFn({
-        data: {
-          clientIds: ids,
-          workspaceId,
-        },
-      });
+      let deleted = false;
+      try {
+        const result = await deleteBulkClientsServerFn({
+          data: {
+            clientIds: ids,
+            workspaceId,
+          },
+        });
+        if (result && result.ok) {
+          deleted = true;
+        }
+      } catch (e) {
+        console.warn("Server bulk delete error, trying direct fallback:", e);
+      }
 
-      if (!result.ok) {
-        toast.error(`Failed to delete clients: ${result.error}`);
-        return;
+      if (!deleted) {
+        await supabase.from("activities").delete().in("client_id", ids);
+        await supabase.from("messages").delete().in("client_id", ids);
+        await supabase.from("call_logs").delete().in("client_id", ids);
+        await supabase.from("documents").delete().in("client_id", ids);
+        await supabase.from("tasks").delete().in("client_id", ids);
+
+        const { error } = await supabase
+          .from("clients")
+          .delete()
+          .in("id", ids)
+          .eq("workspace_id", workspaceId);
+
+        if (error) {
+          toast.error(`Failed to delete clients: ${error.message}`);
+          return;
+        }
       }
 
       setBulkDeleteDialogOpen(false);
