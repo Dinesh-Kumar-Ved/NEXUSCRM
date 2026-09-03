@@ -21,7 +21,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { useTeamForWorkspace } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import {
   CLIENT_SOURCES,
@@ -105,7 +104,6 @@ export function ClientDialog({
 }) {
   const [form, setForm] = useState(EMPTY);
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
-  const { data: team } = useTeamForWorkspace(workspaceId);
 
   useEffect(() => {
     if (!open) return;
@@ -342,24 +340,6 @@ export function ClientDialog({
               onChange={(e) => setForm({ ...form, tags: e.target.value })}
               placeholder="VIP, Repeat Client"
             />
-          </Field>
-          <Field label="Assigned to">
-            <Select
-              value={form.assigned_to}
-              onValueChange={(v) => setForm({ ...form, assigned_to: v })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="unassigned">Unassigned</SelectItem>
-                {(team ?? []).map((member) => (
-                  <SelectItem key={member.id} value={member.id}>
-                    {member.full_name || member.email}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </Field>
           <div className="sm:col-span-2">
             <Field label="Notes">

@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAuth, useProfile, useTeamForWorkspace, useWorkspace } from "@/hooks/use-auth";
+import { useAuth, useProfile, useWorkspace } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import {
   CLIENT_SOURCES,
@@ -102,93 +102,6 @@ function ClientsPage() {
       void supabase.removeChannel(channel);
     };
   }, [queryClient, workspaceId]);
-
-  const { data: team } = useTeamForWorkspace(workspaceId);
-  const teamNames = useMemo(
-    () =>
-      new Map(
-        (team ?? []).map((member) => [
-          member.id,
-          member.full_name || member.email || "Team member",
-        ]),
-      ),
-    [team],
-  );
-
-  const filteredClients = useMemo(() => {
-    return (clientsQuery.data ?? []).filter((client) => {
-      const matchesSearch =
-        !debouncedSearch ||
-        [client.name, client.company, client.email].some((value) =>
-          value?.toLowerCase().includes(debouncedSearch),
-        );
-      const matchesStatus = status === "all" || client.status === status;
-      const matchesSource = source === "all" || client.source === source;
-      return matchesSearch && matchesStatus && matchesSource;
-    });
-  }, [clientsQuery.data, debouncedSearch, source, status]);
-
-  const [isDeleting, setIsDeleting] = useState(false);
-
-  const removeClient = async () => {
-    if (!deleteClient || !workspaceId) return;
-    setIsDeleting(true);
-    const targetClient = deleteClient;
-    try {
-      const { error } = await supabase
-        .from("clients")
-        .delete()
-        .eq("id", targetClient.id)
-        .eq("workspace_id", workspaceId);
-
-      if (error) {
-        toast.error(`Failed to delete client: ${error.message}`);
-        return;
-      }
-
-      setDeleteClient(null);
-      await queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
-      toast.success(`Client "${targetClient.name}" deleted successfully`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to delete client.");
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
-  const openAdd = () => {
-    setSelectedClient(null);
-    setDialogOpen(true);
-  };
-
-  const openEdit = (client: ClientRecord) => {
-    setSelectedClient(client);
-    setDialogOpen(true);
-  };
-
-  const handleClientSaved = async (savedClient: ClientRecord) => {
-    queryClient.setQueryData<ClientRecord[]>(["clients", workspaceId], (currentClients = []) => {
-      const existingIndex = currentClients.findIndex((client) => client.id === savedClient.id);
-      if (existingIndex === -1) return [savedClient, ...currentClients];
-      return currentClients.map((client) => (client.id === savedClient.id ? savedClient : client));
-    });
-    const refreshed = await queryClient.fetchQuery({
-      queryKey: ["clients", workspaceId],
-      queryFn: async () => {
-        const { data, error } = await supabase
-          .from("clients")
-          .select("*")
-          .eq("workspace_id", workspaceId!)
-          .order("updated_at", { ascending: false });
-        if (error) throw error;
-        return (data ?? []) as ClientRecord[];
-      },
-    });
-    const appearsInQuery = refreshed.some((client) => client.id === savedClient.id);
-    if (!appearsInQuery) {
-      throw new Error("The client was saved but is not visible in the current workspace list.");
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -276,20 +189,19 @@ function ClientsPage() {
         </Card>
       ) : (
         <div className="overflow-hidden rounded-xl border bg-card">
-          <div className="hidden grid-cols-[1.4fr_1fr_1.2fr_1fr_1fr_1fr_auto] gap-4 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground lg:grid">
+          <div className="hidden grid-cols-[1.4fr_1fr_1.2fr_1fr_1fr_auto] gap-4 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground lg:grid">
             <span>Name</span>
             <span>Company</span>
             <span>Email</span>
             <span>Status</span>
             <span>Source</span>
-            <span>Assigned to</span>
             <span />
           </div>
           {filteredClients.map((client) => (
             <div
               key={client.id}
               onClick={() => navigate({ to: "/clients/$clientId", params: { clientId: client.id } })}
-              className="grid cursor-pointer gap-3 border-b px-4 py-4 last:border-b-0 hover:bg-muted/40 transition-colors lg:grid-cols-[1.4fr_1fr_1.2fr_1fr_1fr_1fr_auto] lg:items-center lg:gap-4"
+              className="grid cursor-pointer gap-3 border-b px-4 py-4 last:border-b-0 hover:bg-muted/40 transition-colors lg:grid-cols-[1.4fr_1fr_1.2fr_1fr_1fr_auto] lg:items-center lg:gap-4"
             >
               <div className="min-w-0">
                 <Link

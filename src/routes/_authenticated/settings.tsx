@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { BookOpen, Building2, CheckCircle2, ExternalLink, ShieldCheck, Users } from "lucide-react";
+import { BookOpen, Building2, ExternalLink, ShieldCheck } from "lucide-react";
 
 import { IntegrationsManager } from "@/components/settings/integrations-manager";
 import {
@@ -12,7 +12,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { useAuth, useProfile, useTeamForWorkspace, useWorkspace } from "@/hooks/use-auth";
+import { useAuth, useProfile, useWorkspace } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated/settings")({
@@ -25,7 +25,6 @@ export function SettingsPage() {
   const { data: profile } = useProfile(user);
   const { data: workspace } = useWorkspace(user?.id);
   const workspaceId = workspace?.workspace_id ?? null;
-  const { data: team, isLoading: teamLoading } = useTeamForWorkspace(workspaceId);
 
   const workspaceDetailsQuery = useQuery({
     queryKey: ["workspace-details", workspaceId],
@@ -48,80 +47,43 @@ export function SettingsPage() {
           Settings & Integrations
         </h1>
         <p className="text-sm text-muted-foreground">
-          Workspace profile, team roster, and real-time communication accounts connectivity.
+          Workspace profile and real-time communication accounts connectivity.
         </p>
       </header>
 
-      {/* Workspace & Team Cards */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Workspace Info Card */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Building2 className="size-5 text-primary" />
-              <CardTitle className="text-base">Workspace Profile</CardTitle>
+      {/* Workspace Info Card */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <Building2 className="size-5 text-primary" />
+            <CardTitle className="text-base">Workspace Profile</CardTitle>
+          </div>
+          <CardDescription>Details about your private CRM organization.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-3">
+          <div>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+              Workspace Name
+            </p>
+            <p className="mt-0.5 text-sm font-semibold">
+              {workspaceDetailsQuery.data?.name || "Your Private Workspace"}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Your Role</p>
+            <div className="mt-1 flex items-center gap-2">
+              <Badge variant="default">
+                <ShieldCheck className="mr-1 size-3" />
+                Workspace Admin
+              </Badge>
             </div>
-            <CardDescription>Details about your current CRM organization.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                Workspace Name
-              </p>
-              <p className="mt-0.5 text-sm font-semibold">
-                {workspaceDetailsQuery.data?.name || "NexusCRM Workspace"}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Your Role</p>
-              <div className="mt-1 flex items-center gap-2">
-                <Badge variant={profile?.isAdmin ? "default" : "secondary"}>
-                  <ShieldCheck className="mr-1 size-3" />
-                  {profile?.isAdmin ? "Workspace Admin" : "Sales Representative"}
-                </Badge>
-              </div>
-            </div>
-            <div>
-              <p className="text-xs uppercase tracking-wide text-muted-foreground">Signed In As</p>
-              <p className="mt-0.5 text-sm">{user?.email}</p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Team Members Roster */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Users className="size-5 text-primary" />
-              <CardTitle className="text-base">Team Members ({team?.length ?? 0})</CardTitle>
-            </div>
-            <CardDescription>Collaborators in this workspace.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {teamLoading ? (
-              <p className="text-sm text-muted-foreground">Loading team members...</p>
-            ) : (
-              <div className="divide-y rounded-lg border max-h-[160px] overflow-y-auto">
-                {(team ?? []).map((member) => (
-                  <div key={member.id} className="flex items-center justify-between p-2.5 text-sm">
-                    <div>
-                      <p className="font-medium text-foreground">
-                        {member.full_name || "Team Member"}
-                      </p>
-                      <p className="text-xs text-muted-foreground">{member.email}</p>
-                    </div>
-                    {member.id === user?.id && (
-                      <Badge variant="outline" className="text-[11px]">
-                        You
-                      </Badge>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Signed In As</p>
+            <p className="mt-0.5 text-sm font-medium">{user?.email}</p>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Main Communication Channels & Real Integrations Component */}
       <IntegrationsManager workspaceId={workspaceId} />

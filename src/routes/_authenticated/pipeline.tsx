@@ -31,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useAuth, useTeamForWorkspace, useWorkspace } from "@/hooks/use-auth";
+import { useAuth, useWorkspace } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import {
   DEAL_STATUSES,
@@ -77,12 +77,6 @@ export function PipelinePage() {
 
   const [draggedClientId, setDraggedClientId] = useState<string | null>(null);
   const [dragOverStage, setDragOverStage] = useState<DealStatus | null>(null);
-
-  const { data: team } = useTeamForWorkspace(workspaceId);
-  const teamMap = useMemo(
-    () => new Map((team ?? []).map((m) => [m.id, m.full_name || m.email || "Team member"])),
-    [team],
-  );
 
   const clientsQuery = useQuery({
     queryKey: ["clients", workspaceId],
@@ -431,12 +425,6 @@ export function PipelinePage() {
                               <span className="font-semibold text-sm text-foreground">
                                 {formatCurrency(client.deal_value || 0)}
                               </span>
-                              {client.assigned_to && (
-                                <span className="flex items-center gap-1 text-[10px] font-medium text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">
-                                  <User className="h-3 w-3" />
-                                  {teamMap.get(client.assigned_to)?.split(" ")[0] ?? "Assigned"}
-                                </span>
-                              )}
                             </div>
                             
                             {client.last_contacted_at && (
