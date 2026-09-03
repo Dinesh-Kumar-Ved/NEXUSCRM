@@ -43,9 +43,10 @@ import {
   disconnectIntegration,
   getGoogleOAuthUrl,
   getIntegrationsStatus,
-  getIntegrationsStatus,
   saveEmailIntegration,
+  saveWhatsAppIntegration,
   testEmailIntegration,
+  testWhatsAppIntegration,
 } from "@/lib/integrations.functions";
 import { triggerGmailSync } from "@/lib/email-conversations.functions";
 import type { MaskedIntegrationInfo } from "@/lib/integrations.server";
@@ -60,14 +61,23 @@ export function IntegrationsManager({ workspaceId }: IntegrationsManagerProps) {
   // Server functions
   const getStatusFn = useServerFn(getIntegrationsStatus);
   const getOAuthUrlFn = useServerFn(getGoogleOAuthUrl);
+  const saveWhatsAppFn = useServerFn(saveWhatsAppIntegration);
+  const testWhatsAppFn = useServerFn(testWhatsAppIntegration);
   const saveEmailFn = useServerFn(saveEmailIntegration);
   const testEmailFn = useServerFn(testEmailIntegration);
   const disconnectFn = useServerFn(disconnectIntegration);
 
   // Modals state
+  const [waDialogOpen, setWaDialogOpen] = useState(false);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [testEmailDialogOpen, setTestEmailDialogOpen] = useState(false);
   const [isConnectingGmail, setIsConnectingGmail] = useState(false);
+
+  // WhatsApp form state
+  const [waPhoneNumberId, setWaPhoneNumberId] = useState("");
+  const [waBusinessAccountId, setWaBusinessAccountId] = useState("");
+  const [waAccessToken, setWaAccessToken] = useState("");
+  const [waVerifyToken, setWaVerifyToken] = useState("");
 
   // Email form state
   const [emailProvider, setEmailProvider] = useState<"gmail" | "resend" | "smtp" | "sendgrid">(
@@ -152,13 +162,15 @@ export function IntegrationsManager({ workspaceId }: IntegrationsManagerProps) {
     isLoading,
     refetch,
   } = useQuery<{
+    whatsapp: MaskedIntegrationInfo;
+    email: MaskedIntegrationInfo;
   } | null>({
     queryKey: ["integrations-status", workspaceId],
     enabled: Boolean(workspaceId),
     queryFn: async () => {
       if (!workspaceId) return null;
       const res = await getStatusFn({ data: { workspaceId } });
-      return res as { email: MaskedIntegrationInfo };
+      return res as { whatsapp: MaskedIntegrationInfo; email: MaskedIntegrationInfo };
     },
   });
 
@@ -185,6 +197,57 @@ export function IntegrationsManager({ workspaceId }: IntegrationsManagerProps) {
     }
   };
 
+  // Save WhatsApp mutation
+  const saveWhatsAppMutation = useMutation({
+    mutationFn: async () => {
+      if (!workspaceId) throw new Error("Workspace is required");
+      return await saveWhatsAppFn({
+        data: {
+          workspaceId,
+          phoneNumberId: waPhoneNumberId.trim(),
+          businessAccountId: waBusinessAccountId.trim() || undefined,
+          accessToken: waAccessToken.trim(),
+          verifyToken: waVerifyToken.trim() || undefined,
+        },
+      });
+    },
+    onSuccess: (result) => {
+      if (result.success) {
+        toast.success("WhatsApp Business connected & verified successfully!");
+        setWaDialogOpen(false);
+        setWaAccessToken(""); // Clear sensitive input
+      } else {
+        toast.error(`WhatsApp connection failed: ${result.error || "Invalid credentials"}`);
+      }
+      void queryClient.invalidateQueries({ queryKey: ["integrations-status"] });
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Failed to save WhatsApp configuration");
+    },
+  });
+
+  // Test WhatsApp mutation
+  const testWhatsAppMutation = useMutation({
+    mutationFn: async () => {
+      if (!workspaceId) throw new Error("Workspace is required");
+      return await testWhatsAppFn({
+        data: { workspaceId },
+      });
+    },
+    onSuccess: (res) => {
+      if (res.ok) {
+        toast.success(
+          `WhatsApp verified! Display: ${res.details?.displayPhoneNumber || res.details?.verifiedName || "Active"}`,
+        );
+      } else {
+        toast.error(`WhatsApp test failed: ${res.error}`);
+      }
+      void queryClient.invalidateQueries({ queryKey: ["integrations-status"] });
+    },
+    onError: (err) => {
+      toast.error(err instanceof Error ? err.message : "Test request failed");
+    },
+  });
 
   // Save Email mutation
   const saveEmailMutation = useMutation({
@@ -245,14 +308,14 @@ export function IntegrationsManager({ workspaceId }: IntegrationsManagerProps) {
 
   // Disconnect mutation
   const disconnectMutation = useMutation({
-    mutationFn: async (providerType: "email") => {
+    mutationFn: async (providerType: "whatsapp" | "email") => {
       if (!workspaceId) throw new Error("Workspace is required");
       return await disconnectFn({
         data: { workspaceId, providerType },
       });
     },
     onSuccess: (_, providerType) => {
-      toast.info(`Email integration disconnected.`);
+      toast.info(`${providerType === "whatsapp" ? "WhatsApp" : "Email"} integration disconnected.`);
       void queryClient.invalidateQueries({ queryKey: ["integrations-status"] });
     },
     onError: (err) => {
@@ -260,6 +323,7 @@ export function IntegrationsManager({ workspaceId }: IntegrationsManagerProps) {
     },
   });
 
+  const wa = status?.whatsapp;
   const em = status?.email;
   const isGmail = em?.provider === "gmail";
 
@@ -271,7 +335,7 @@ export function IntegrationsManager({ workspaceId }: IntegrationsManagerProps) {
             Communication Channels & Real Integrations
           </h2>
           <p className="text-xs text-muted-foreground">
-            Connect your personal Gmail account for direct
+            Connect your official WhatsApp Business number and personal Gmail account for direct
             outbound messaging.
           </p>
         </div>
@@ -287,7 +351,143 @@ export function IntegrationsManager({ workspaceId }: IntegrationsManagerProps) {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
+        {/* 1. WHATSAPP BUSINESS CARD */}
+        <Card className="flex flex-col border-border/80 shadow-xs">
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="flex size-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20">
+                  <MessageSquare className="size-5" />
+                </div>
+                <div>
+                  <CardTitle className="text-base">WhatsApp Business</CardTitle>
+                  <CardDescription className="text-xs">
+                    Official Meta WhatsApp Cloud API
+                  </CardDescription>
+                </div>
+              </div>
 
+              {wa?.isConnected ? (
+                <Badge className="border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/20">
+                  <CheckCircle2 className="mr-1 size-3" /> Connected & Verified
+                </Badge>
+              ) : wa?.status === "error" ? (
+                <Badge variant="destructive" className="gap-1">
+                  <AlertCircle className="size-3" /> Connection Error
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-muted-foreground">
+                  <WifiOff className="mr-1 size-3" /> Not Connected
+                </Badge>
+              )}
+            </div>
+          </CardHeader>
+
+          <CardContent className="flex-1 space-y-3 pb-3 text-xs">
+            {wa?.isConnected ? (
+              <div className="rounded-lg bg-muted/40 p-3 space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Phone Number ID:</span>
+                  <span className="font-mono font-medium">
+                    {wa.maskedDetails?.phoneNumberId || "—"}
+                  </span>
+                </div>
+                {wa.maskedDetails?.displayPhoneNumber && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Display Number:</span>
+                    <span className="font-medium text-foreground">
+                      {wa.maskedDetails.displayPhoneNumber}
+                    </span>
+                  </div>
+                )}
+                {wa.maskedDetails?.verifiedName && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Verified Name:</span>
+                    <span className="font-medium text-foreground">
+                      {wa.maskedDetails.verifiedName}
+                    </span>
+                  </div>
+                )}
+                {wa.maskedDetails?.qualityRating && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Quality Rating:</span>
+                    <Badge variant="secondary" className="text-[10px] uppercase font-semibold">
+                      {wa.maskedDetails.qualityRating}
+                    </Badge>
+                  </div>
+                )}
+                {wa.lastTestedAt && (
+                  <div className="flex justify-between text-[11px] text-muted-foreground pt-1 border-t">
+                    <span>Last Verified:</span>
+                    <span>{new Date(wa.lastTestedAt).toLocaleString()}</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="rounded-lg border border-dashed p-4 text-center text-muted-foreground">
+                <p className="font-medium text-foreground">No WhatsApp Account Connected</p>
+                <p className="mt-1 text-[11px]">
+                  Connect your Meta Phone Number ID and System User Token to send verified WhatsApp
+                  messages.
+                </p>
+              </div>
+            )}
+
+            {wa?.lastTestError && (
+              <Alert variant="destructive" className="py-2 text-xs">
+                <AlertCircle className="size-3.5" />
+                <AlertDescription className="text-xs">{wa.lastTestError}</AlertDescription>
+              </Alert>
+            )}
+          </CardContent>
+
+          <CardFooter className="flex items-center justify-between gap-2 border-t pt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setWaPhoneNumberId((wa?.maskedDetails?.phoneNumberId as string) || "");
+                setWaBusinessAccountId((wa?.maskedDetails?.businessAccountId as string) || "");
+                setWaDialogOpen(true);
+              }}
+              className="text-xs"
+            >
+              {wa?.isConnected ? "Reconfigure" : "Connect WhatsApp"}
+            </Button>
+
+            <div className="flex items-center gap-2">
+              {wa?.isConnected && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => testWhatsAppMutation.mutate()}
+                    disabled={testWhatsAppMutation.isPending}
+                    className="gap-1.5 text-xs text-emerald-600 hover:text-emerald-700"
+                  >
+                    {testWhatsAppMutation.isPending ? (
+                      <Loader2 className="size-3 animate-spin" />
+                    ) : (
+                      <Wifi className="size-3" />
+                    )}
+                    Test Connection
+                  </Button>
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => disconnectMutation.mutate("whatsapp")}
+                    disabled={disconnectMutation.isPending}
+                    className="size-8 p-0 text-muted-foreground hover:text-destructive"
+                    title="Disconnect WhatsApp"
+                  >
+                    <Trash2 className="size-4" />
+                  </Button>
+                </>
+              )}
+            </div>
+          </CardFooter>
+        </Card>
 
         {/* 2. EMAIL INTEGRATION CARD (GMAIL OAUTH & APIS) */}
         <Card className="flex flex-col border-border/80 shadow-xs">
@@ -498,7 +698,101 @@ export function IntegrationsManager({ workspaceId }: IntegrationsManagerProps) {
         </Card>
       </div>
 
+      {/* DIALOG: CONFIGURE WHATSAPP CLOUD API */}
+      <Dialog open={waDialogOpen} onOpenChange={setWaDialogOpen}>
+        <DialogContent className="max-w-md sm:max-w-lg">
+          <DialogHeader>
+            <div className="flex items-center gap-2">
+              <MessageSquare className="size-5 text-emerald-600" />
+              <DialogTitle>Connect WhatsApp Business Cloud API</DialogTitle>
+            </div>
+            <DialogDescription className="text-xs">
+              Configure your official WhatsApp Cloud API credentials from Meta for Developers.
+            </DialogDescription>
+          </DialogHeader>
 
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveWhatsAppMutation.mutate();
+            }}
+            className="space-y-4 py-2"
+          >
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">
+                Phone Number ID <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                placeholder="e.g. 104829103849102"
+                value={waPhoneNumberId}
+                onChange={(e) => setWaPhoneNumberId(e.target.value)}
+                required
+                className="font-mono text-xs"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Found in Meta for Developers &rarr; App Dashboard &rarr; WhatsApp &rarr; API Setup.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">WhatsApp Business Account ID (WABA ID)</Label>
+              <Input
+                placeholder="e.g. 109283746192834"
+                value={waBusinessAccountId}
+                onChange={(e) => setWaBusinessAccountId(e.target.value)}
+                className="font-mono text-xs"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">
+                Meta Access Token <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                type="password"
+                placeholder="Permanent System User Token (starts with EAA...)"
+                value={waAccessToken}
+                onChange={(e) => setWaAccessToken(e.target.value)}
+                required
+                className="font-mono text-xs"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Your token is tested against Meta's Graph API before saving, stored securely on the
+                server, and never exposed back to the browser.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Webhook Verify Token (Optional)</Label>
+              <Input
+                placeholder="Custom secret string for inbound webhook verification"
+                value={waVerifyToken}
+                onChange={(e) => setWaVerifyToken(e.target.value)}
+                className="text-xs"
+              />
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setWaDialogOpen(false)}
+                disabled={saveWhatsAppMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={saveWhatsAppMutation.isPending || !waPhoneNumberId || !waAccessToken}
+                className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                {saveWhatsAppMutation.isPending && <Loader2 className="size-4 animate-spin" />}
+                Verify & Save Connection
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* DIALOG: CONFIGURE EMAIL PROVIDER */}
       <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>

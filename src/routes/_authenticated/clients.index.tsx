@@ -2,12 +2,14 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Mail, Plus, Search, Trash2 } from "lucide-react";
+import { Mail, MessageSquare, Plus, Search, Trash2 } from "lucide-react";
 
+import { BulkSendMessageDialog } from "@/components/bulk-send-message-dialog";
 import { ClientDialog } from "@/components/client-dialog";
 import { SendMessageDialog } from "@/components/send-message-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -63,6 +65,9 @@ function ClientsPage() {
   const [emailClient, setEmailClient] = useState<ClientRecord | null>(null);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [deleteClient, setDeleteClient] = useState<ClientRecord | null>(null);
+  const [selectedClientIds, setSelectedClientIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [bulkSendDialogOpen, setBulkSendDialogOpen] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
@@ -156,6 +161,32 @@ function ClientsPage() {
     }
   };
 
+  const removeBulkClients = async () => {
+    if (selectedClientIds.size === 0 || !workspaceId) return;
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase
+        .from("clients")
+        .delete()
+        .in("id", Array.from(selectedClientIds))
+        .eq("workspace_id", workspaceId);
+
+      if (error) {
+        toast.error(`Failed to delete clients: ${error.message}`);
+        return;
+      }
+
+      setBulkDeleteDialogOpen(false);
+      setSelectedClientIds(new Set());
+      await queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
+      toast.success(`Successfully deleted ${selectedClientIds.size} clients`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete clients.");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const openAdd = () => {
     setSelectedClient(null);
     setDialogOpen(true);
@@ -199,9 +230,27 @@ function ClientsPage() {
             Manage the people and companies in your workspace.
           </p>
         </div>
-        <Button onClick={openAdd}>
-          <Plus className="mr-2 size-4" /> Add client
-        </Button>
+        <div className="flex items-center gap-2">
+          {selectedClientIds.size > 0 && (
+            <>
+              <Button
+                variant="outline"
+                onClick={() => setBulkSendDialogOpen(true)}
+              >
+                <MessageSquare className="mr-2 size-4" /> Send message
+              </Button>
+              <Button
+                variant="destructive"
+                onClick={() => setBulkDeleteDialogOpen(true)}
+              >
+                <Trash2 className="mr-2 size-4" /> Delete selected
+              </Button>
+            </>
+          )}
+          <Button onClick={openAdd}>
+            <Plus className="mr-2 size-4" /> Add client
+          </Button>
+        </div>
       </header>
 
       <div className="flex flex-col gap-3 sm:flex-row">
@@ -276,7 +325,18 @@ function ClientsPage() {
         </Card>
       ) : (
         <div className="overflow-hidden rounded-xl border bg-card">
-          <div className="hidden grid-cols-[1.4fr_1fr_1.2fr_1fr_1fr_1fr_auto] gap-4 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground lg:grid">
+          <div className="hidden grid-cols-[auto_1.4fr_1fr_1.2fr_1fr_1fr_1fr_auto] gap-4 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground lg:grid lg:items-center">
+            <Checkbox
+              checked={filteredClients.length > 0 && selectedClientIds.size === filteredClients.length}
+              onCheckedChange={(checked) => {
+                if (checked) {
+                  setSelectedClientIds(new Set(filteredClients.map((c) => c.id)));
+                } else {
+                  setSelectedClientIds(new Set());
+                }
+              }}
+              aria-label="Select all"
+            />
             <span>Name</span>
             <span>Company</span>
             <span>Email</span>
@@ -289,20 +349,46 @@ function ClientsPage() {
             <div
               key={client.id}
               onClick={() => navigate({ to: "/clients/$clientId", params: { clientId: client.id } })}
-              className="grid cursor-pointer gap-3 border-b px-4 py-4 last:border-b-0 hover:bg-muted/40 transition-colors lg:grid-cols-[1.4fr_1fr_1.2fr_1fr_1fr_1fr_auto] lg:items-center lg:gap-4"
+              className="grid cursor-pointer gap-3 border-b px-4 py-4 last:border-b-0 hover:bg-muted/40 transition-colors lg:grid-cols-[auto_1.4fr_1fr_1.2fr_1fr_1fr_1fr_auto] lg:items-center lg:gap-4"
             >
-              <div className="min-w-0">
-                <Link
-                  to="/clients/$clientId"
-                  params={{ clientId: client.id }}
-                  className="text-sm font-semibold text-foreground hover:text-primary hover:underline"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  {client.name}
-                </Link>
-                <p className="text-xs text-muted-foreground">
-                  Updated {formatDate(client.updated_at)}
-                </p>
+              <div className="hidden lg:flex" onClick={(e) => e.stopPropagation()}>
+                <Checkbox
+                  checked={selectedClientIds.has(client.id)}
+                  onCheckedChange={(checked) => {
+                    const next = new Set(selectedClientIds);
+                    if (checked) next.add(client.id);
+                    else next.delete(client.id);
+                    setSelectedClientIds(next);
+                  }}
+                  aria-label={`Select ${client.name}`}
+                />
+              </div>
+              <div className="min-w-0 flex items-start gap-3 lg:block">
+                <div className="lg:hidden mt-0.5" onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
+                    checked={selectedClientIds.has(client.id)}
+                    onCheckedChange={(checked) => {
+                      const next = new Set(selectedClientIds);
+                      if (checked) next.add(client.id);
+                      else next.delete(client.id);
+                      setSelectedClientIds(next);
+                    }}
+                    aria-label={`Select ${client.name}`}
+                  />
+                </div>
+                <div className="min-w-0">
+                  <Link
+                    to="/clients/$clientId"
+                    params={{ clientId: client.id }}
+                    className="text-sm font-semibold text-foreground hover:text-primary hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {client.name}
+                  </Link>
+                  <p className="text-xs text-muted-foreground">
+                    Updated {formatDate(client.updated_at)}
+                  </p>
+                </div>
               </div>
               <p className="truncate text-sm">{client.company || "—"}</p>
               <p className="truncate text-sm text-muted-foreground">{client.email || "—"}</p>
@@ -333,16 +419,14 @@ function ClientsPage() {
                 <Button variant="outline" size="sm" onClick={() => openEdit(client)}>
                   Edit
                 </Button>
-                {profile?.isAdmin ? (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Delete ${client.name}`}
-                    onClick={() => setDeleteClient(client)}
-                  >
-                    <Trash2 className="size-4 text-destructive" />
-                  </Button>
-                ) : null}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Delete ${client.name}`}
+                  onClick={() => setDeleteClient(client)}
+                >
+                  <Trash2 className="size-4 text-destructive" />
+                </Button>
               </div>
             </div>
           ))}
@@ -396,6 +480,41 @@ function ClientsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <AlertDialog
+        open={bulkDeleteDialogOpen}
+        onOpenChange={(open) => !open && !isDeleting && setBulkDeleteDialogOpen(false)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete selected clients?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to permanently delete {selectedClientIds.size} selected client(s)? All associated history, messages, and records will be deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isDeleting}
+              onClick={(event) => {
+                event.preventDefault();
+                void removeBulkClients();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? "Deleting..." : "Delete All"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <BulkSendMessageDialog
+        open={bulkSendDialogOpen}
+        onOpenChange={setBulkSendDialogOpen}
+        clients={(clientsQuery.data ?? []).filter((c) => selectedClientIds.has(c.id))}
+        onSent={() => {
+          setSelectedClientIds(new Set());
+          void queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
+        }}
+      />
     </div>
   );
 }
