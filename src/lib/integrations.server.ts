@@ -623,7 +623,8 @@ export async function getWorkspaceIntegrationConfig(
   lastTestedAt: string | null;
   lastTestError: string | null;
 } | null> {
-  const { data } = await (supabase as any)
+  const client = supabaseAdmin || supabase;
+  const { data } = await (client as any)
     .from("workspace_integrations")
     .select("*")
     .eq("workspace_id", workspaceId)
