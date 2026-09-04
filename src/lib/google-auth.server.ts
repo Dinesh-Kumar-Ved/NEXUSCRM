@@ -8,11 +8,23 @@ export interface GoogleOAuthConfig {
   redirectUri: string;
 }
 
+function cleanCredential(val: string | undefined): string {
+  if (!val) return "";
+  let cleaned = val.trim();
+  if (
+    (cleaned.startsWith('"') && cleaned.endsWith('"')) ||
+    (cleaned.startsWith("'") && cleaned.endsWith("'"))
+  ) {
+    cleaned = cleaned.slice(1, -1).trim();
+  }
+  return cleaned.replace(/[\u200B-\u200D\uFEFF]/g, "");
+}
+
 export function getGoogleOAuthConfig(): GoogleOAuthConfig {
-  const clientId = process.env["GOOGLE_CLIENT_ID"]?.trim();
-  const clientSecret = process.env["GOOGLE_CLIENT_SECRET"]?.trim();
+  const clientId = cleanCredential(process.env["GOOGLE_CLIENT_ID"]);
+  const clientSecret = cleanCredential(process.env["GOOGLE_CLIENT_SECRET"]);
   const redirectUri =
-    process.env["GOOGLE_REDIRECT_URI"]?.trim() ||
+    cleanCredential(process.env["GOOGLE_REDIRECT_URI"]) ||
     "http://localhost:8080/api/integrations/google/oauth/callback";
 
   if (!clientId || !clientSecret) {
@@ -68,7 +80,7 @@ export async function createGoogleAuthUrl(params: {
   authUrl.searchParams.set("response_type", "code");
   authUrl.searchParams.set("scope", GOOGLE_OAUTH_SCOPES);
   authUrl.searchParams.set("access_type", "offline");
-  authUrl.searchParams.set("prompt", "select_account consent");
+  authUrl.searchParams.set("prompt", "consent select_account");
   authUrl.searchParams.set("include_granted_scopes", "true");
   authUrl.searchParams.set("state", state);
 

@@ -93,13 +93,29 @@ export const Route = createFileRoute("/api/integrations/google/oauth/callback")(
           if (refreshToken) {
             encryptedPayload = encryptToken(refreshToken);
           } else if (isSameAccount && existingIntegration?.encrypted_refresh_token) {
-            // Retain previous token if reconnecting the same Google account
-            encryptedPayload = existingIntegration.encrypted_refresh_token as unknown as import("@/lib/crypto").EncryptedPayload;
+            // Test if retained refresh token is actually valid with Google API
+            try {
+              const { decryptToken } = await import("@/lib/crypto");
+              const { refreshGmailAccessToken } = await import("@/lib/google-auth.server");
+              const oldRefreshToken = decryptToken(
+                existingIntegration.encrypted_refresh_token as unknown as import("@/lib/crypto").EncryptedPayload,
+              );
+              await refreshGmailAccessToken(oldRefreshToken);
+              encryptedPayload = existingIntegration.encrypted_refresh_token as unknown as import("@/lib/crypto").EncryptedPayload;
+            } catch (testErr) {
+              const errTxt = testErr instanceof Error ? testErr.message : "Invalid token";
+              console.warn(`[GMAIL_CALLBACK] Retained refresh token failed validation: ${errTxt}`);
+              return Response.redirect(
+                `${redirectBase}?error=${encodeURIComponent(
+                  `Stored authorization for ${emailAddress} is invalid or expired. Please visit https://myaccount.google.com/permissions, remove access for this app, and click Connect Gmail again.`,
+                )}`,
+                302,
+              );
+            }
           } else {
-            // Switched accounts or first connect, but Google did not return a refresh token
             return Response.redirect(
               `${redirectBase}?error=${encodeURIComponent(
-                `Google did not return a refresh token for ${emailAddress}. Please ensure you approve all permissions on the Google consent screen.`,
+                `Google did not return a refresh token for ${emailAddress}. Please ensure you check all permission boxes on the Google consent screen.`,
               )}`,
               302,
             );
