@@ -1,3 +1,4 @@
+import { useServerFn } from "@tanstack/react-start";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Loader2, Radar } from "lucide-react";
@@ -7,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
+import { getGoogleAuthUrl } from "@/lib/auth.functions";
 
 type SupabaseErrorLike = {
   message?: string | undefined;
@@ -84,6 +86,7 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
+  const getGoogleUrlFn = useServerFn(getGoogleAuthUrl);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -330,15 +333,18 @@ function AuthPage() {
               setGoogleBusy(true);
               try {
                 const redirectTo = `${window.location.origin}/auth/callback`;
-                const { error } = await supabase.auth.signInWithOAuth({
-                  provider: "google",
-                  options: {
-                    redirectTo,
-                  },
-                });
-                if (error) {
-                  setAuthError(error.message || "Failed to initialize Google login.");
-                  setGoogleBusy(false);
+                const result = await getGoogleUrlFn({ data: { redirectTo } });
+                if (result?.url) {
+                  window.location.href = result.url;
+                } else {
+                  const { error } = await supabase.auth.signInWithOAuth({
+                    provider: "google",
+                    options: { redirectTo },
+                  });
+                  if (error) {
+                    setAuthError(error.message || "Failed to initialize Google login.");
+                    setGoogleBusy(false);
+                  }
                 }
               } catch (err) {
                 setAuthError(err instanceof Error ? err.message : "Failed to initialize Google login.");

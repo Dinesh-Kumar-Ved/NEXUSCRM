@@ -8,23 +8,11 @@ export interface GoogleOAuthConfig {
   redirectUri: string;
 }
 
-function cleanCredential(val: string | undefined): string {
-  if (!val) return "";
-  let cleaned = val.trim();
-  if (
-    (cleaned.startsWith('"') && cleaned.endsWith('"')) ||
-    (cleaned.startsWith("'") && cleaned.endsWith("'"))
-  ) {
-    cleaned = cleaned.slice(1, -1).trim();
-  }
-  return cleaned.replace(/[\u200B-\u200D\uFEFF]/g, "");
-}
-
 export function getGoogleOAuthConfig(): GoogleOAuthConfig {
-  const clientId = cleanCredential(process.env["GOOGLE_CLIENT_ID"]);
-  const clientSecret = cleanCredential(process.env["GOOGLE_CLIENT_SECRET"]);
+  const clientId = process.env["GOOGLE_CLIENT_ID"]?.trim();
+  const clientSecret = process.env["GOOGLE_CLIENT_SECRET"]?.trim();
   const redirectUri =
-    cleanCredential(process.env["GOOGLE_REDIRECT_URI"]) ||
+    process.env["GOOGLE_REDIRECT_URI"]?.trim() ||
     "http://localhost:8080/api/integrations/google/oauth/callback";
 
   if (!clientId || !clientSecret) {

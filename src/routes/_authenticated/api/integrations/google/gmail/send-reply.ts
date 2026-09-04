@@ -74,27 +74,16 @@ async function resolveWorkspaceAndUser(request: Request): Promise<{ workspaceId:
     return { error: json({ error: "Unauthorized" }, { status: 401 }) };
   }
   const userId = data.user.id;
-  const { data: ws } = await supabaseAdmin
+  const { data: ws, error: wsErr } = await supabaseAdmin
     .from("workspaces")
     .select("id")
-    .eq("created_by", userId)
+    .eq("user_id", userId)
     .limit(1)
     .maybeSingle();
-
-  let workspaceId = ws?.id;
-  if (!workspaceId) {
-    const { data: firstWs } = await supabaseAdmin
-      .from("workspaces")
-      .select("id")
-      .limit(1)
-      .maybeSingle();
-    workspaceId = firstWs?.id;
-  }
-
-  if (!workspaceId) {
+  if (wsErr || !ws?.id) {
     return { error: json({ error: "Workspace not found" }, { status: 401 }) };
   }
-  return { workspaceId, userId };
+  return { workspaceId: ws.id, userId };
 }
 
 export async function action({ request }: ActionFunctionArgs) {

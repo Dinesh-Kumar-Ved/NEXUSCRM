@@ -33,7 +33,7 @@ export const Route = createFileRoute("/api/integrations/google/oauth/url")({
           if (userId) {
             const { data: ws, error: wsErr } = await supabaseAdmin
               .from("workspaces")
-              .select("id, created_by")
+              .select("id, user_id")
               .eq("id", workspaceId)
               .maybeSingle();
 
@@ -46,12 +46,12 @@ export const Route = createFileRoute("/api/integrations/google/oauth/url")({
           } else {
             const { data: ws } = await supabaseAdmin
               .from("workspaces")
-              .select("created_by")
+              .select("user_id")
               .eq("id", workspaceId)
               .maybeSingle();
 
-            if (ws?.created_by) {
-              userId = ws.created_by;
+            if (ws?.user_id) {
+              userId = ws.user_id;
             }
           }
 
