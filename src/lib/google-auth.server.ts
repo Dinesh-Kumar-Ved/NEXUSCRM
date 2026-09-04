@@ -80,7 +80,7 @@ export async function createGoogleAuthUrl(params: {
   authUrl.searchParams.set("response_type", "code");
   authUrl.searchParams.set("scope", GOOGLE_OAUTH_SCOPES);
   authUrl.searchParams.set("access_type", "offline");
-  authUrl.searchParams.set("prompt", "consent select_account");
+  authUrl.searchParams.set("prompt", "select_account consent");
   authUrl.searchParams.set("include_granted_scopes", "true");
   authUrl.searchParams.set("state", state);
 
