@@ -558,3 +558,24 @@ export async function dialClient(
 
   return { ok: result.ok, error: result.error ?? null };
 }
+
+export async function removeCampaign(args: BaseArgs & { campaignId: string }) {
+  const client = supabaseAdmin || args.supabase;
+  const { error } = await (client as any)
+    .from("campaigns")
+    .delete()
+    .eq("id", args.campaignId);
+  if (error) throw new Error(error.message);
+  return { ok: true };
+}
+
+export async function removeAllCampaigns(args: BaseArgs) {
+  const client = supabaseAdmin || args.supabase;
+  const { error } = await (client as any)
+    .from("campaigns")
+    .delete()
+    .neq("id", "00000000-0000-0000-0000-000000000000");
+  if (error) throw new Error(error.message);
+  return { ok: true };
+}
+

@@ -1,5 +1,6 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import {
   CheckCircle2,
   Mail,
@@ -7,18 +8,30 @@ import {
   MessageSquare,
   Plus,
   Send,
+  Trash2,
   Users,
-  XCircle,
 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { BroadcastDialog } from "@/components/broadcast-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth, useWorkspace } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDateTime, type ClientRecord } from "@/lib/crm";
+import { clearAllCampaigns, deleteCampaign } from "@/lib/messaging.functions";
 
 export const Route = createFileRoute("/_authenticated/campaigns")({
   head: () => ({ meta: [{ title: "Campaigns · NexusCRM" }] }),
@@ -29,7 +42,16 @@ export function CampaignsPage() {
   const { user } = useAuth();
   const { data: workspace } = useWorkspace(user?.id);
   const workspaceId = workspace?.workspace_id ?? null;
+
   const [broadcastOpen, setBroadcastOpen] = useState(false);
+  const [deletingCampaign, setDeletingCampaign] = useState<{ id: string; name: string } | null>(
+    null,
+  );
+  const [clearAllOpen, setClearAllOpen] = useState(false);
+
+  const queryClient = useQueryClient();
+  const removeSingle = useServerFn(deleteCampaign);
+  const removeAll = useServerFn(clearAllCampaigns);
 
   const clientsQuery = useQuery({
     queryKey: ["clients", workspaceId],
@@ -54,6 +76,30 @@ export function CampaignsPage() {
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (campaignId: string) => removeSingle({ data: { campaignId } }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+      toast.success("Campaign deleted successfully");
+      setDeletingCampaign(null);
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || "Failed to delete campaign");
+    },
+  });
+
+  const clearAllMutation = useMutation({
+    mutationFn: () => removeAll(),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["campaigns"] });
+      toast.success("All campaign history cleared successfully");
+      setClearAllOpen(false);
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || "Failed to clear campaign history");
     },
   });
 
@@ -130,11 +176,23 @@ export function CampaignsPage() {
 
       {/* Campaigns Table */}
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Campaign History</CardTitle>
-          <CardDescription>
-            Logs and delivery analytics for past multi-channel broadcasts.
-          </CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <div>
+            <CardTitle className="text-base">Campaign History</CardTitle>
+            <CardDescription>
+              Logs and delivery analytics for past multi-channel broadcasts.
+            </CardDescription>
+          </div>
+          {campaigns.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => setClearAllOpen(true)}
+            >
+              <Trash2 className="mr-1.5 size-3.5" /> Clear All History
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           {campaignsQuery.isLoading ? (
@@ -161,6 +219,7 @@ export function CampaignsPage() {
                     <th className="px-4 py-3">Recipients</th>
                     <th className="px-4 py-3">Delivered / Failed</th>
                     <th className="px-4 py-3">Created</th>
+                    <th className="px-4 py-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -203,6 +262,17 @@ export function CampaignsPage() {
                       <td className="px-4 py-3.5 text-xs text-muted-foreground">
                         {formatDateTime(camp.created_at)}
                       </td>
+                      <td className="px-4 py-3.5 text-right">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                          title={`Delete "${camp.name}"`}
+                          onClick={() => setDeletingCampaign({ id: camp.id, name: camp.name })}
+                        >
+                          <Trash2 className="size-4 text-destructive" />
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -211,6 +281,73 @@ export function CampaignsPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Delete Single Campaign Confirmation Dialog */}
+      <AlertDialog
+        open={Boolean(deletingCampaign)}
+        onOpenChange={(open) => !open && setDeletingCampaign(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Campaign History</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete{" "}
+              <span className="font-semibold text-foreground">
+                "{deletingCampaign?.name}"
+              </span>
+              ? This will permanently delete this broadcast record and its delivery logs from your database.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteMutation.isPending}
+              className={buttonVariants({ variant: "destructive" })}
+              onClick={(e) => {
+                e.preventDefault();
+                if (deletingCampaign) {
+                  deleteMutation.mutate(deletingCampaign.id);
+                }
+              }}
+            >
+              {deleteMutation.isPending ? "Deleting…" : "Delete Campaign"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Clear All Campaigns Confirmation Dialog */}
+      <AlertDialog open={clearAllOpen} onOpenChange={setClearAllOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Clear All Campaign History</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to clear all{" "}
+              <span className="font-semibold text-foreground">
+                {campaigns.length} broadcast records
+              </span>
+              ? This will permanently delete all campaign history logs from your database. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={clearAllMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={clearAllMutation.isPending}
+              className={buttonVariants({ variant: "destructive" })}
+              onClick={(e) => {
+                e.preventDefault();
+                clearAllMutation.mutate();
+              }}
+            >
+              {clearAllMutation.isPending ? "Clearing All…" : "Clear All History"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <BroadcastDialog
         open={broadcastOpen}

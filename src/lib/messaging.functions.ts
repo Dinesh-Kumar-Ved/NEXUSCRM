@@ -185,3 +185,30 @@ export const startClientCall = createServerFn({ method: "POST" })
       message: data.message,
     });
   });
+
+const deleteCampaignSchema = z.object({
+  campaignId: z.string().uuid(),
+});
+
+export const deleteCampaign = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((input: unknown) => deleteCampaignSchema.parse(input))
+  .handler(async ({ data, context }) => {
+    const { removeCampaign } = await import("./messaging-dispatch.server");
+    return removeCampaign({
+      supabase: context.supabase,
+      userId: context.userId,
+      campaignId: data.campaignId,
+    });
+  });
+
+export const clearAllCampaigns = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { removeAllCampaigns } = await import("./messaging-dispatch.server");
+    return removeAllCampaigns({
+      supabase: context.supabase,
+      userId: context.userId,
+    });
+  });
+
