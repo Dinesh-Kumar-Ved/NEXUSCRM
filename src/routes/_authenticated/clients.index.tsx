@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Mail, Plus, Search, Trash2 } from "lucide-react";
 
 import { ClientDialog } from "@/components/client-dialog";
+import { NotificationsPopover } from "@/components/notifications-popover";
 import { SendMessageDialog } from "@/components/send-message-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -152,9 +153,15 @@ function ClientsPage() {
             Manage the people and companies in your workspace.
           </p>
         </div>
-        <Button onClick={openAdd}>
-          <Plus className="mr-2 size-4" /> Add client
-        </Button>
+        <div className="flex items-center gap-2">
+          <NotificationsPopover
+            workspaceId={workspaceId}
+            clients={clientsQuery.data ?? []}
+          />
+          <Button onClick={openAdd}>
+            <Plus className="mr-2 size-4" /> Add client
+          </Button>
+        </div>
       </header>
 
       <div className="flex flex-col gap-3 sm:flex-row">
