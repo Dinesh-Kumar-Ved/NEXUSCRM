@@ -333,21 +333,36 @@ function AuthPage() {
               setGoogleBusy(true);
               try {
                 const redirectTo = `${window.location.origin}/auth/callback`;
-                const result = await getGoogleUrlFn({ data: { redirectTo } });
-                if (result?.url) {
-                  window.location.href = result.url;
-                } else {
-                  const { error } = await supabase.auth.signInWithOAuth({
-                    provider: "google",
-                    options: { redirectTo },
-                  });
-                  if (error) {
-                    setAuthError(error.message || "Failed to initialize Google login.");
-                    setGoogleBusy(false);
-                  }
+                let authUrl: string | null = null;
+                try {
+                  const result = await getGoogleUrlFn({ data: { redirectTo } });
+                  authUrl = result?.url ?? null;
+                } catch {
+                  authUrl = null;
+                }
+
+                if (authUrl) {
+                  window.location.href = authUrl;
+                  return;
+                }
+
+                const { error } = await supabase.auth.signInWithOAuth({
+                  provider: "google",
+                  options: { redirectTo },
+                });
+
+                if (error) {
+                  setAuthError(
+                    error.message?.includes("fetch") || error.message?.includes("network")
+                      ? "Unable to connect to Google Auth server. Please verify your Supabase project URL."
+                      : error.message || "Failed to initialize Google login.",
+                  );
+                  setGoogleBusy(false);
                 }
               } catch (err) {
-                setAuthError(err instanceof Error ? err.message : "Failed to initialize Google login.");
+                setAuthError(
+                  err instanceof Error ? err.message : "Failed to initialize Google login.",
+                );
                 setGoogleBusy(false);
               }
             }}
