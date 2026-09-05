@@ -1,7 +1,7 @@
 import { useServerFn } from "@tanstack/react-start";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Loader2, Radar } from "lucide-react";
+import { Eye, EyeOff, Loader2, Radar } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -84,6 +84,47 @@ export const Route = createFileRoute("/auth")({
   component: AuthPage,
 });
 
+function PasswordInput({
+  id,
+  value,
+  onChange,
+  placeholder,
+  required,
+  minLength,
+}: {
+  id: string;
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder?: string;
+  required?: boolean;
+  minLength?: number;
+}) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="relative">
+      <Input
+        id={id}
+        type={visible ? "text" : "password"}
+        required={required}
+        minLength={minLength}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        className="pr-10"
+      />
+      <button
+        type="button"
+        tabIndex={-1}
+        onClick={() => setVisible((v) => !v)}
+        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+        aria-label={visible ? "Hide password" : "Show password"}
+      >
+        {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+      </button>
+    </div>
+  );
+}
+
 function AuthPage() {
   const navigate = useNavigate();
   const getGoogleUrlFn = useServerFn(getGoogleAuthUrl);
@@ -94,6 +135,9 @@ function AuthPage() {
   const [googleBusy, setGoogleBusy] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [forgotMode, setForgotMode] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetBusy, setResetBusy] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -250,10 +294,22 @@ function AuthPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <Input
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="password">Password</Label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearMessages();
+                        setForgotMode(true);
+                        setResetEmail(email);
+                      }}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                  <PasswordInput
                     id="password"
-                    type="password"
                     required
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -290,14 +346,15 @@ function AuthPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password-up">Password</Label>
-                  <Input
+                  <PasswordInput
                     id="password-up"
-                    type="password"
                     required
                     minLength={8}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    placeholder="Min. 8 characters"
                   />
+                  <p className="text-[11px] text-muted-foreground">Must be at least 8 characters</p>
                 </div>
                 <Button type="submit" className="w-full" disabled={busy}>
                   {busy ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
@@ -393,6 +450,61 @@ function AuthPage() {
           </Button>
         </div>
       </section>
+
+      {/* Forgot Password Modal */}
+      {forgotMode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-lg space-y-4">
+            <h2 className="text-lg font-semibold">Reset your password</h2>
+            <p className="text-sm text-muted-foreground">
+              Enter your email address and we'll send you a link to reset your password.
+            </p>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const trimmed = resetEmail.trim();
+                if (!trimmed || !trimmed.includes("@")) return;
+                setResetBusy(true);
+                const { error } = await supabase.auth.resetPasswordForEmail(trimmed, {
+                  redirectTo: `${window.location.origin}/auth`,
+                });
+                setResetBusy(false);
+                if (error) {
+                  setAuthError(error.message || "Failed to send reset email.");
+                } else {
+                  setSuccessMessage("Password reset link sent! Check your inbox.");
+                }
+                setForgotMode(false);
+              }}
+              className="space-y-3"
+            >
+              <Input
+                type="email"
+                required
+                placeholder="you@company.com"
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setForgotMode(false)}
+                  disabled={resetBusy}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" className="flex-1" disabled={resetBusy || !resetEmail.trim()}>
+                  {resetBusy ? <Loader2 className="mr-2 size-4 animate-spin" /> : null}
+                  Send reset link
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

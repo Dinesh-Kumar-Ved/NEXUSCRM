@@ -55,32 +55,38 @@ export function useWorkspace(userId: string | undefined) {
     queryKey: ["workspace", userId],
     enabled: Boolean(userId),
     queryFn: async () => {
-      const { data, error } = await supabase
+      // First: find workspace via membership table (respects per-user isolation)
+      const { data: membership, error: memberError } = await supabase
+        .from("workspace_members")
+        .select("workspace_id, role")
+        .eq("user_id", userId!)
+        .limit(1)
+        .maybeSingle();
+
+      if (memberError) {
+        console.error("Error loading workspace membership:", memberError);
+      }
+
+      if (membership) {
+        return {
+          workspace_id: membership.workspace_id,
+          role: membership.role || "admin",
+        };
+      }
+
+      // Second: try created_by as fallback for legacy workspaces
+      const { data: ownedWs } = await supabase
         .from("workspaces")
-        .select("id, created_by")
+        .select("id")
         .eq("created_by", userId!)
         .limit(1)
         .maybeSingle();
 
-      if (error) {
-        console.error("Error loading workspace:", error);
+      if (ownedWs) {
+        return { workspace_id: ownedWs.id, role: "admin" };
       }
 
-      if (data) {
-        return { workspace_id: data.id, role: "admin" };
-      }
-
-      // Fallback if created_by doesn't match
-      const { data: firstWs } = await supabase
-        .from("workspaces")
-        .select("id")
-        .limit(1)
-        .maybeSingle();
-
-      if (firstWs) {
-        return { workspace_id: firstWs.id, role: "admin" };
-      }
-
+      // No workspace found — user gets a fresh empty dashboard
       return null;
     },
   });

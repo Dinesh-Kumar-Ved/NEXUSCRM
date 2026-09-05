@@ -1,4 +1,5 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   BarChart3,
   CalendarClock,
@@ -63,6 +64,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const { data } = useProfile(user);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
@@ -75,6 +77,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       toast.error("Unable to sign out. Please try again.");
       return;
     }
+    // Clear ALL cached data so the next user gets a fresh session
+    queryClient.clear();
     void navigate({ to: "/auth", replace: true });
   };
 
