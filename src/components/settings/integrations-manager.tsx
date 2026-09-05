@@ -120,7 +120,9 @@ export function IntegrationsManager({ workspaceId }: IntegrationsManagerProps) {
           timestamp: new Date(),
         });
         if (res.newMessages > 0) {
-          toast.success(`Gmail sync complete: ${res.newMessages} new message${res.newMessages > 1 ? "s" : ""} synced!`);
+          toast.success(
+            `Gmail sync complete: ${res.newMessages} new message${res.newMessages > 1 ? "s" : ""} synced!`,
+          );
         } else {
           toast.success(`Gmail inbox is up to date (${res.synced} messages total).`);
         }
@@ -191,7 +193,8 @@ export function IntegrationsManager({ workspaceId }: IntegrationsManagerProps) {
       }
     } catch (err) {
       setIsConnectingGmail(false);
-      const msg = err instanceof Error ? err.message : "Failed to initialize Google OAuth connection.";
+      const msg =
+        err instanceof Error ? err.message : "Failed to initialize Google OAuth connection.";
       console.error("[GMAIL] Error:", msg);
       toast.error(msg);
     }
@@ -565,7 +568,11 @@ export function IntegrationsManager({ workspaceId }: IntegrationsManagerProps) {
                   <div className="flex justify-between text-[11px] text-emerald-600 dark:text-emerald-400 pt-1 border-t font-medium">
                     <span>Last Gmail Sync:</span>
                     <span>
-                      {lastSyncResult.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} ({lastSyncResult.newMessages} new messages)
+                      {lastSyncResult.timestamp.toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}{" "}
+                      ({lastSyncResult.newMessages} new messages)
                     </span>
                   </div>
                 )}
@@ -607,46 +614,36 @@ export function IntegrationsManager({ workspaceId }: IntegrationsManagerProps) {
             )}
           </CardContent>
 
-          <CardFooter className="flex items-center justify-between gap-2 border-t pt-3">
-            <div className="flex items-center gap-2">
-              {isGmail ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleConnectGmail}
-                  disabled={isConnectingGmail}
-                  className="text-xs gap-1.5"
-                >
-                  {isConnectingGmail && <Loader2 className="size-3 animate-spin" />}
-                  {em?.isConnected ? "Switch / Reconnect Gmail" : "Connect Gmail"}
-                </Button>
-              ) : (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setFromEmail((em?.maskedDetails?.fromEmail as string) || "");
-                    setFromName((em?.maskedDetails?.fromName as string) || "");
-                    setEmailProvider((em?.provider as any) || "gmail");
-                    setEmailDialogOpen(true);
-                  }}
-                  className="text-xs"
-                >
-                  {em?.isConnected ? "Reconfigure" : "Other Providers"}
-                </Button>
-              )}
+          <CardFooter className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setFromEmail((em?.maskedDetails?.fromEmail as string) || "");
+                  setFromName((em?.maskedDetails?.fromName as string) || "");
+                  setEmailProvider("smtp");
+                  setSmtpHost("smtp.hostinger.com");
+                  setSmtpPort(465);
+                  setSmtpSecure(true);
+                  setSmtpUser((em?.maskedDetails?.fromEmail as string) || "");
+                  setEmailDialogOpen(true);
+                }}
+                className="text-xs border-purple-200 bg-purple-50/50 text-purple-700 hover:bg-purple-100 hover:text-purple-800 dark:border-purple-900 dark:bg-purple-950/30 dark:text-purple-300"
+              >
+                Configure Hostinger / SMTP Email
+              </Button>
 
-              {em?.isConnected && !isGmail && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleConnectGmail}
-                  disabled={isConnectingGmail}
-                  className="text-xs gap-1.5"
-                >
-                  Switch to Gmail
-                </Button>
-              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleConnectGmail}
+                disabled={isConnectingGmail}
+                className="text-xs gap-1.5"
+              >
+                {isConnectingGmail && <Loader2 className="size-3 animate-spin" />}
+                {isGmail && em?.isConnected ? "Reconnect Gmail" : "Connect Gmail"}
+              </Button>
             </div>
 
             <div className="flex items-center gap-2">
@@ -810,7 +807,7 @@ export function IntegrationsManager({ workspaceId }: IntegrationsManagerProps) {
 
           <Tabs
             value={emailProvider}
-            onValueChange={(v) => setEmailProvider(v as any)}
+            onValueChange={(v) => setEmailProvider(v as "gmail" | "resend" | "smtp" | "sendgrid")}
             className="w-full"
           >
             <TabsList className="grid w-full grid-cols-4">
@@ -835,11 +832,13 @@ export function IntegrationsManager({ workspaceId }: IntegrationsManagerProps) {
                     Official Google OAuth 2.0
                   </h4>
                   <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                    Connect your personal Gmail account securely. NexusCRM requests permissions
-                    to send emails on your behalf and identify your email address (
-                    <code className="font-mono text-[11px] bg-muted px-1 rounded">gmail.send</code>
-                    {" "}and{" "}
-                    <code className="font-mono text-[11px] bg-muted px-1 rounded">userinfo.email</code>
+                    Connect your personal Gmail account securely. NexusCRM requests permissions to
+                    send emails on your behalf and identify your email address (
+                    <code className="font-mono text-[11px] bg-muted px-1 rounded">gmail.send</code>{" "}
+                    and{" "}
+                    <code className="font-mono text-[11px] bg-muted px-1 rounded">
+                      userinfo.email
+                    </code>
                     ). No passwords are ever stored.
                   </p>
                 </div>
@@ -926,13 +925,45 @@ export function IntegrationsManager({ workspaceId }: IntegrationsManagerProps) {
 
                 {emailProvider === "smtp" && (
                   <div className="space-y-3">
+                    <div className="flex items-center justify-between rounded-lg bg-purple-500/10 p-2.5 border border-purple-500/20 text-xs">
+                      <div>
+                        <p className="font-semibold text-purple-900 dark:text-purple-300">
+                          Hostinger Business Email
+                        </p>
+                        <p className="text-[11px] text-purple-700 dark:text-purple-400">
+                          Use{" "}
+                          <code className="font-mono bg-purple-200/50 dark:bg-purple-900/50 px-1 rounded">
+                            smtp.hostinger.com
+                          </code>{" "}
+                          on Port 465 (SSL)
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          setSmtpHost("smtp.hostinger.com");
+                          setSmtpPort(465);
+                          setSmtpSecure(true);
+                          if (fromEmail && !smtpUser) {
+                            setSmtpUser(fromEmail);
+                          }
+                          toast.info("Hostinger SMTP presets applied (Port 465, SSL)");
+                        }}
+                        className="text-[11px] h-7 bg-purple-600 hover:bg-purple-700 text-white"
+                      >
+                        Auto-fill Hostinger
+                      </Button>
+                    </div>
+
                     <div className="grid gap-3 sm:grid-cols-3">
                       <div className="sm:col-span-2 space-y-1">
                         <Label className="text-xs font-medium">
                           SMTP Host <span className="text-destructive">*</span>
                         </Label>
                         <Input
-                          placeholder="smtp.gmail.com"
+                          placeholder="smtp.hostinger.com"
                           value={smtpHost}
                           onChange={(e) => setSmtpHost(e.target.value)}
                           required
@@ -944,7 +975,11 @@ export function IntegrationsManager({ workspaceId }: IntegrationsManagerProps) {
                         <Input
                           type="number"
                           value={smtpPort}
-                          onChange={(e) => setSmtpPort(Number(e.target.value))}
+                          onChange={(e) => {
+                            const p = Number(e.target.value);
+                            setSmtpPort(p);
+                            if (p === 465) setSmtpSecure(true);
+                          }}
                           className="text-xs font-mono"
                         />
                       </div>
@@ -956,11 +991,11 @@ export function IntegrationsManager({ workspaceId }: IntegrationsManagerProps) {
                           SMTP Username <span className="text-destructive">*</span>
                         </Label>
                         <Input
-                          placeholder="user@domain.com"
+                          placeholder="nishant@truehealglobal.com"
                           value={smtpUser}
                           onChange={(e) => setSmtpUser(e.target.value)}
                           required
-                          className="text-xs"
+                          className="text-xs font-mono"
                         />
                       </div>
                       <div className="space-y-1">
@@ -969,7 +1004,7 @@ export function IntegrationsManager({ workspaceId }: IntegrationsManagerProps) {
                         </Label>
                         <Input
                           type="password"
-                          placeholder="App Password"
+                          placeholder="Hostinger Email Password"
                           value={smtpPassword}
                           onChange={(e) => setSmtpPassword(e.target.value)}
                           required
@@ -982,7 +1017,7 @@ export function IntegrationsManager({ workspaceId }: IntegrationsManagerProps) {
                       <div>
                         <p className="text-xs font-medium">Use TLS / SSL</p>
                         <p className="text-[11px] text-muted-foreground">
-                          Enabled automatically for port 465
+                          Enabled for Hostinger port 465
                         </p>
                       </div>
                       <Switch checked={smtpSecure} onCheckedChange={setSmtpSecure} />
