@@ -27,6 +27,8 @@ import { Route as ApiPublicTwilioInboundRouteImport } from './routes/api/public/
 import { Route as ApiIntegrationsGoogleOauthCallbackRouteImport } from './routes/api/integrations/google/oauth/callback'
 import { Route as ApiIntegrationsGoogleOauthDiagnosticRouteImport } from './routes/api/integrations/google/oauth/diagnostic'
 import { Route as ApiIntegrationsGoogleOauthUrlRouteImport } from './routes/api/integrations/google/oauth/url'
+import { Route as AuthenticatedApiIntegrationsGoogleGmailSendReplyRouteImport } from './routes/_authenticated/api/integrations/google/gmail/send-reply'
+import { Route as AuthenticatedApiIntegrationsGoogleGmailSyncRouteImport } from './routes/_authenticated/api/integrations/google/gmail/sync'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -123,6 +125,18 @@ const ApiIntegrationsGoogleOauthUrlRoute =
     path: '/api/integrations/google/oauth/url',
     getParentRoute: () => rootRouteImport,
   } as any)
+const AuthenticatedApiIntegrationsGoogleGmailSendReplyRoute =
+  AuthenticatedApiIntegrationsGoogleGmailSendReplyRouteImport.update({
+    id: '/api/integrations/google/gmail/send-reply',
+    path: '/api/integrations/google/gmail/send-reply',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedApiIntegrationsGoogleGmailSyncRoute =
+  AuthenticatedApiIntegrationsGoogleGmailSyncRouteImport.update({
+    id: '/api/integrations/google/gmail/sync',
+    path: '/api/integrations/google/gmail/sync',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -142,6 +156,8 @@ export interface FileRoutesByFullPath {
   '/api/integrations/google/oauth/callback': typeof ApiIntegrationsGoogleOauthCallbackRoute
   '/api/integrations/google/oauth/diagnostic': typeof ApiIntegrationsGoogleOauthDiagnosticRoute
   '/api/integrations/google/oauth/url': typeof ApiIntegrationsGoogleOauthUrlRoute
+  '/api/integrations/google/gmail/send-reply': typeof AuthenticatedApiIntegrationsGoogleGmailSendReplyRoute
+  '/api/integrations/google/gmail/sync': typeof AuthenticatedApiIntegrationsGoogleGmailSyncRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -160,6 +176,8 @@ export interface FileRoutesByTo {
   '/api/integrations/google/oauth/callback': typeof ApiIntegrationsGoogleOauthCallbackRoute
   '/api/integrations/google/oauth/diagnostic': typeof ApiIntegrationsGoogleOauthDiagnosticRoute
   '/api/integrations/google/oauth/url': typeof ApiIntegrationsGoogleOauthUrlRoute
+  '/api/integrations/google/gmail/send-reply': typeof AuthenticatedApiIntegrationsGoogleGmailSendReplyRoute
+  '/api/integrations/google/gmail/sync': typeof AuthenticatedApiIntegrationsGoogleGmailSyncRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -181,6 +199,8 @@ export interface FileRoutesById {
   '/api/integrations/google/oauth/callback': typeof ApiIntegrationsGoogleOauthCallbackRoute
   '/api/integrations/google/oauth/diagnostic': typeof ApiIntegrationsGoogleOauthDiagnosticRoute
   '/api/integrations/google/oauth/url': typeof ApiIntegrationsGoogleOauthUrlRoute
+  '/_authenticated/api/integrations/google/gmail/send-reply': typeof AuthenticatedApiIntegrationsGoogleGmailSendReplyRoute
+  '/_authenticated/api/integrations/google/gmail/sync': typeof AuthenticatedApiIntegrationsGoogleGmailSyncRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -202,6 +222,8 @@ export interface FileRouteTypes {
     | '/api/integrations/google/oauth/callback'
     | '/api/integrations/google/oauth/diagnostic'
     | '/api/integrations/google/oauth/url'
+    | '/api/integrations/google/gmail/send-reply'
+    | '/api/integrations/google/gmail/sync'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -220,6 +242,8 @@ export interface FileRouteTypes {
     | '/api/integrations/google/oauth/callback'
     | '/api/integrations/google/oauth/diagnostic'
     | '/api/integrations/google/oauth/url'
+    | '/api/integrations/google/gmail/send-reply'
+    | '/api/integrations/google/gmail/sync'
   id:
     | '__root__'
     | '/'
@@ -240,6 +264,8 @@ export interface FileRouteTypes {
     | '/api/integrations/google/oauth/callback'
     | '/api/integrations/google/oauth/diagnostic'
     | '/api/integrations/google/oauth/url'
+    | '/_authenticated/api/integrations/google/gmail/send-reply'
+    | '/_authenticated/api/integrations/google/gmail/sync'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -381,6 +407,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiIntegrationsGoogleOauthUrlRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/api/integrations/google/gmail/send-reply': {
+      id: '/_authenticated/api/integrations/google/gmail/send-reply'
+      path: '/api/integrations/google/gmail/send-reply'
+      fullPath: '/api/integrations/google/gmail/send-reply'
+      preLoaderRoute: typeof AuthenticatedApiIntegrationsGoogleGmailSendReplyRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/api/integrations/google/gmail/sync': {
+      id: '/_authenticated/api/integrations/google/gmail/sync'
+      path: '/api/integrations/google/gmail/sync'
+      fullPath: '/api/integrations/google/gmail/sync'
+      preLoaderRoute: typeof AuthenticatedApiIntegrationsGoogleGmailSyncRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
@@ -405,6 +445,8 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedTasksRoute: typeof AuthenticatedTasksRoute
   AuthenticatedTemplatesRoute: typeof AuthenticatedTemplatesRoute
+  AuthenticatedApiIntegrationsGoogleGmailSendReplyRoute: typeof AuthenticatedApiIntegrationsGoogleGmailSendReplyRoute
+  AuthenticatedApiIntegrationsGoogleGmailSyncRoute: typeof AuthenticatedApiIntegrationsGoogleGmailSyncRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -415,6 +457,10 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedTasksRoute: AuthenticatedTasksRoute,
   AuthenticatedTemplatesRoute: AuthenticatedTemplatesRoute,
+  AuthenticatedApiIntegrationsGoogleGmailSendReplyRoute:
+    AuthenticatedApiIntegrationsGoogleGmailSendReplyRoute,
+  AuthenticatedApiIntegrationsGoogleGmailSyncRoute:
+    AuthenticatedApiIntegrationsGoogleGmailSyncRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =

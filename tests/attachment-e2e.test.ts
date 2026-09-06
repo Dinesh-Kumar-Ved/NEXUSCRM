@@ -75,7 +75,7 @@ describe("E2E PDF Attachment & Reply Verification", () => {
     assert.equal(parsed.to?.[0]?.address, "acme.corp@client.example");
     assert.equal(parsed.attachments.length, 1, "Should contain exactly 1 attachment");
 
-    const parsedAtt = parsed.attachments[0];
+    const parsedAtt = parsed.attachments[0]!;
     assert.equal(parsedAtt.filename, "Client_Proposal_2026.pdf");
     assert.equal(parsedAtt.mimeType, "application/pdf");
 
@@ -131,9 +131,10 @@ describe("E2E PDF Attachment & Reply Verification", () => {
 
     assert.equal(parsedReply.inReplyTo, "<msg-1001@client.example>");
     assert.equal(parsedReply.attachments.length, 1);
-    assert.equal(parsedReply.attachments[0].filename, "Signed_Revision_Addendum.pdf");
+    const replyAtt = parsedReply.attachments[0]!;
+    assert.equal(replyAtt.filename, "Signed_Revision_Addendum.pdf");
 
-    const replyBuffer = Buffer.from(parsedReply.attachments[0].content as ArrayBuffer);
+    const replyBuffer = Buffer.from(replyAtt.content as ArrayBuffer);
     assert.deepEqual(replyBuffer, replyPdf, "Reply PDF must match original bytes");
   });
 });

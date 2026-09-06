@@ -1,8 +1,13 @@
-import type { ActionFunctionArgs } from "@remix-run/node";
-import { json } from "@remix-run/node";
+import { createFileRoute } from "@tanstack/react-router";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { getAccessTokenForWorkspace } from "@/lib/gmail-sync.server";
 import { fetchGmailProfile, sendGmailMessage, type EmailAttachment } from "@/lib/google-auth.server";
+
+const json = (data: any, init?: ResponseInit) => 
+  new Response(JSON.stringify(data), { 
+    status: init?.status || 200, 
+    headers: { "Content-Type": "application/json", ...init?.headers } 
+  });
 
 const MAX_PER_FILE = 10 * 1024 * 1024;
 const MAX_TOTAL = 25 * 1024 * 1024;
@@ -77,7 +82,7 @@ async function resolveWorkspaceAndUser(request: Request): Promise<{ workspaceId:
   const { data: ws, error: wsErr } = await supabaseAdmin
     .from("workspaces")
     .select("id")
-    .eq("user_id", userId)
+    .eq("created_by", userId)
     .limit(1)
     .maybeSingle();
   if (wsErr || !ws?.id) {
@@ -86,151 +91,136 @@ async function resolveWorkspaceAndUser(request: Request): Promise<{ workspaceId:
   return { workspaceId: ws.id, userId };
 }
 
-export async function action({ request }: ActionFunctionArgs) {
-  if (request.method !== "POST") {
-    return json({ error: "Method not allowed" }, { status: 405 });
-  }
+export const Route = createFileRoute("/_authenticated/api/integrations/google/gmail/send-reply")({
+  server: {
+    handlers: {
+      POST: async ({ request }) => {
+        const resolved = await resolveWorkspaceAndUser(request);
+        if ("error" in resolved) return resolved.error;
+        const { workspaceId } = resolved;
 
-  const resolved = await resolveWorkspaceAndUser(request);
-  if ("error" in resolved) return resolved.error;
-  const { workspaceId } = resolved;
+        let payload: any;
+        try {
+          payload = await request.json();
+        } catch {
+          return json({ error: "Invalid JSON payload" }, { status: 400 });
+        }
 
-  let payload: any;
-  try {
-    payload = await request.json();
-  } catch {
-    return json({ error: "Invalid JSON payload" }, { status: 400 });
-  }
+        const { clientId, threadId, subject, body, html } = payload;
+        if (!clientId || !threadId || !subject || !body) {
+          return json({ error: "Missing required fields (clientId, threadId, subject, body)" }, { status: 400 });
+        }
 
-  const { clientId, threadId, subject, body, html } = payload;
-  if (!clientId || !threadId || !subject || !body) {
-    return json({ error: "Missing required fields (clientId, threadId, subject, body)" }, { status: 400 });
-  }
+        const attachmentsOrError = validateAttachments(payload.attachments);
+        if (typeof attachmentsOrError === "string") {
+          return json({ error: attachmentsOrError }, { status: 400 });
+        }
+        const attachments = attachmentsOrError;
 
-  const attachmentsOrError = validateAttachments(payload.attachments);
-  if (typeof attachmentsOrError === "string") {
-    return json({ error: attachmentsOrError }, { status: 400 });
-  }
-  const attachments = attachmentsOrError;
+        const inReplyTo: string | undefined =
+          typeof payload.inReplyTo === "string" ? payload.inReplyTo.trim() || undefined : undefined;
+        const references: string | undefined =
+          typeof payload.references === "string" ? payload.references.trim() || undefined : undefined;
 
-  const inReplyTo: string | undefined =
-    typeof payload.inReplyTo === "string" ? payload.inReplyTo.trim() || undefined : undefined;
-  const references: string | undefined =
-    typeof payload.references === "string" ? payload.references.trim() || undefined : undefined;
+        const { data: client, error: clientErr } = await supabaseAdmin
+          .from("clients")
+          .select("email, workspace_id")
+          .eq("id", String(clientId))
+          .maybeSingle();
+        if (clientErr || !client) {
+          return json({ error: "Client not found" }, { status: 404 });
+        }
+        if (client.workspace_id !== workspaceId) {
+          return json({ error: "Client does not belong to workspace" }, { status: 403 });
+        }
+        const toEmail = client.email;
+        if (!toEmail) {
+          return json({ error: "Client has no email address" }, { status: 400 });
+        }
 
-  const { data: client, error: clientErr } = await supabaseAdmin
-    .from("clients")
-    .select("email, workspace_id")
-    .eq("id", String(clientId))
-    .maybeSingle();
-  if (clientErr || !client) {
-    return json({ error: "Client not found" }, { status: 404 });
-  }
-  if (client.workspace_id !== workspaceId) {
-    return json({ error: "Client does not belong to workspace" }, { status: 403 });
-  }
-  const toEmail = client.email?.trim();
-  if (!toEmail) {
-    return json({ error: "Client has no email address" }, { status: 400 });
-  }
+        const accessToken = await getAccessTokenForWorkspace(workspaceId);
+        if (!accessToken) {
+          return json({ error: "Google integration not connected or token expired" }, { status: 403 });
+        }
 
-  let accessToken: string;
-  let fromEmail: string;
-  try {
-    accessToken = await getAccessTokenForWorkspace(workspaceId);
-    const profile = await fetchGmailProfile(accessToken);
-    fromEmail = profile.emailAddress;
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Failed to obtain Gmail token";
-    return json({ error: msg }, { status: 500 });
-  }
+        const profile = await fetchGmailProfile(accessToken).catch(() => null);
+        if (!profile || !profile.emailAddress) {
+          return json({ error: "Failed to fetch Gmail profile or missing email address" }, { status: 500 });
+        }
+        const fromEmail = profile.emailAddress;
 
-  const sendResult = await sendGmailMessage({
-    accessToken,
-    from: fromEmail,
-    to: toEmail,
-    subject,
-    text: body,
-    html: typeof html === "string" ? html : undefined,
-    threadId: String(threadId),
-    inReplyTo,
-    references,
-    attachments: attachments.length > 0 ? attachments : undefined,
-  });
+        const msgId = Array.from({ length: 32 }, () => Math.floor(Math.random() * 16).toString(16)).join("");
+        const referencesHeader = [references, inReplyTo].filter(Boolean).join(" ").trim();
 
-  if (!sendResult.ok) {
-    return json({ error: sendResult.error ?? "Failed to send Gmail message" }, { status: 500 });
-  }
-
-  const msgId = sendResult.messageId ?? `out_${Date.now()}`;
-  const processedOutboundAttachments: Array<{
-    filename: string;
-    mimeType: string;
-    size: number;
-    storagePath?: string;
-  }> = [];
-
-  if (attachments && attachments.length > 0) {
-    for (const att of attachments) {
-      const cleanLen = att.contentBase64.replace(/\s+/g, "").replace(/=+$/, "").length;
-      const sizeBytes = Math.floor((cleanLen * 3) / 4);
-      const safeName = att.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const storagePath = `${workspaceId}/${msgId}/${safeName}`;
-
-      try {
-        const buffer = Buffer.from(att.contentBase64, "base64");
-        await supabaseAdmin.storage
-          .from("email-attachments")
-          .upload(storagePath, buffer, {
-            contentType: att.mimeType,
-            upsert: true,
-          });
-        processedOutboundAttachments.push({
-          filename: att.filename,
-          mimeType: att.mimeType,
-          size: sizeBytes,
-          storagePath,
+        const sendResult = await sendGmailMessage({
+          accessToken,
+          from: fromEmail,
+          to: toEmail,
+          subject,
+          text: body,
+          html: typeof html === "string" ? html : undefined,
+          inReplyTo: inReplyTo || `<${msgId}@mail.gmail.com>`,
+          references: referencesHeader || undefined,
+          threadId: String(threadId),
+          attachments,
         });
-      } catch (attErr) {
-        console.warn("Could not upload outbound attachment to storage:", attErr);
-        processedOutboundAttachments.push({
-          filename: att.filename,
-          mimeType: att.mimeType,
-          size: sizeBytes,
+
+        const processedOutboundAttachments = [];
+        if (attachments && attachments.length > 0) {
+          for (const att of attachments) {
+            const buffer = Buffer.from(att.contentBase64, "base64");
+            const { data: uploadData, error: uploadErr } = await supabaseAdmin.storage
+              .from("email-attachments")
+              .upload(`${workspaceId}/${clientId}/${Date.now()}-${att.filename}`, buffer, {
+                contentType: att.mimeType,
+                upsert: false,
+              });
+
+            if (!uploadErr && uploadData?.path) {
+              const { data: signedUrlData } = await supabaseAdmin.storage
+                .from("email-attachments")
+                .createSignedUrl(uploadData.path, 60 * 60 * 24 * 365 * 10);
+              processedOutboundAttachments.push({
+                filename: att.filename,
+                mimeType: att.mimeType,
+                size: buffer.length,
+                storagePath: uploadData.path,
+                signedUrl: signedUrlData?.signedUrl ?? null,
+              });
+            }
+          }
+        }
+
+        await (supabaseAdmin as unknown as any).from("email_messages").insert({
+          workspace_id: workspaceId,
+          client_id: String(clientId),
+          thread_id: String(threadId),
+          provider_message_id: sendResult.messageId ?? msgId,
+          rfc_message_id: "",
+          direction: "outbound",
+          from_email: fromEmail,
+          to_email: toEmail,
+          subject,
+          body_text: body,
+          body_html: typeof html === "string" ? html : `<p>${body.replace(/\n/g, "<br/>")}</p>`,
+          attachments: processedOutboundAttachments,
+          in_reply_to: inReplyTo ?? null,
+          references: references ?? null,
+          sent_at: new Date(),
+          received_at: new Date(),
+        });
+
+        await supabaseAdmin
+          .from("clients")
+          .update({ last_contacted_at: new Date().toISOString() })
+          .eq("id", String(clientId));
+
+        return json({
+          ok: true,
+          messageId: sendResult.messageId,
+          attachments: processedOutboundAttachments.length,
         });
       }
     }
   }
-
-  await (supabaseAdmin as unknown as any).from("email_messages").insert({
-    workspace_id: workspaceId,
-    client_id: String(clientId),
-    thread_id: String(threadId),
-    provider_message_id: sendResult.messageId ?? msgId,
-    rfc_message_id: "",
-    direction: "outbound",
-    from_email: fromEmail,
-    to_email: toEmail,
-    subject,
-    body_text: body,
-    body_html: typeof html === "string" ? html : `<p>${body.replace(/\n/g, "<br/>")}</p>`,
-    attachments: processedOutboundAttachments,
-    in_reply_to: inReplyTo ?? null,
-    references: references ?? null,
-    sent_at: new Date(),
-    received_at: new Date(),
-  });
-
-  await supabaseAdmin
-    .from("clients")
-    .update({ last_contacted_at: new Date().toISOString() })
-    .eq("id", String(clientId));
-
-  return json({
-    ok: true,
-    messageId: sendResult.messageId,
-    attachments: processedOutboundAttachments.length,
-  });
-}
-
-export const loader = undefined;
+});

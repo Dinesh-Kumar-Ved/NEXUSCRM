@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { useAuth, useWorkspace } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { PERSONALIZATION_TOKENS, personalize, type Channel } from "@/lib/crm";
 
@@ -44,17 +45,22 @@ type Template = {
 };
 
 export function TemplatesPage() {
+  const { user } = useAuth();
+  const { data: workspace } = useWorkspace(user?.id);
+  const workspaceId = workspace?.workspace_id ?? null;
   const queryClient = useQueryClient();
   const [selectedChannel, setSelectedChannel] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
 
   const templatesQuery = useQuery({
-    queryKey: ["templates"],
+    queryKey: ["templates", workspaceId],
+    enabled: Boolean(workspaceId),
     queryFn: async () => {
       const { data, error } = await supabase
         .from("templates")
         .select("*")
+        .eq("workspace_id", workspaceId!)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as Template[];
@@ -186,6 +192,7 @@ export function TemplatesPage() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         template={editingTemplate}
+        workspaceId={workspaceId}
         onSaved={() => void queryClient.invalidateQueries({ queryKey: ["templates"] })}
       />
     </div>
@@ -197,11 +204,13 @@ function TemplateDialog({
   onOpenChange,
   template,
   onSaved,
+  workspaceId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   template: Template | null;
   onSaved: () => void;
+  workspaceId: string | null;
 }) {
   const [name, setName] = useState(template?.name ?? "");
   const [channel, setChannel] = useState<Exclude<Channel, "call">>(
@@ -252,6 +261,7 @@ function TemplateDialog({
           channel,
           subject: channel === "email" ? subject.trim() || null : null,
           body: body.trim(),
+          workspace_id: workspaceId,
         });
         if (error) throw error;
         toast.success("Template created");

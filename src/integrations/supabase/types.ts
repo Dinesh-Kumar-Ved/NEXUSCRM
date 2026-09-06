@@ -121,10 +121,11 @@ export type Database = {
           sent_count: number
           status: string
           subject: string | null
+          workspace_id: string | null
         }
         Insert: {
           body: string
-          channel: Database["public"]["Enums"]["msg_channel"]
+          channel?: Database["public"]["Enums"]["msg_channel"]
           created_at?: string
           created_by?: string | null
           failed_count?: number
@@ -134,6 +135,7 @@ export type Database = {
           sent_count?: number
           status?: string
           subject?: string | null
+          workspace_id?: string | null
         }
         Update: {
           body?: string
@@ -147,6 +149,7 @@ export type Database = {
           sent_count?: number
           status?: string
           subject?: string | null
+          workspace_id?: string | null
         }
         Relationships: []
       }
@@ -416,6 +419,7 @@ export type Database = {
           id: string
           notes: string | null
           title: string
+          workspace_id: string | null
         }
         Insert: {
           assigned_to?: string | null
@@ -427,6 +431,7 @@ export type Database = {
           id?: string
           notes?: string | null
           title: string
+          workspace_id?: string | null
         }
         Update: {
           assigned_to?: string | null
@@ -438,6 +443,7 @@ export type Database = {
           id?: string
           notes?: string | null
           title?: string
+          workspace_id?: string | null
         }
         Relationships: [
           {
@@ -459,6 +465,7 @@ export type Database = {
           name: string
           subject: string | null
           updated_at: string
+          workspace_id: string | null
         }
         Insert: {
           body: string
@@ -469,6 +476,7 @@ export type Database = {
           name: string
           subject?: string | null
           updated_at?: string
+          workspace_id?: string | null
         }
         Update: {
           body?: string
@@ -479,6 +487,7 @@ export type Database = {
           name?: string
           subject?: string | null
           updated_at?: string
+          workspace_id?: string | null
         }
         Relationships: []
       }

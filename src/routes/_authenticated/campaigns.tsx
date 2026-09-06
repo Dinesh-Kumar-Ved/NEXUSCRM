@@ -67,12 +67,13 @@ export function CampaignsPage() {
   });
 
   const campaignsQuery = useQuery({
-    queryKey: ["campaigns", user?.id],
-    enabled: Boolean(user?.id),
+    queryKey: ["campaigns", workspaceId],
+    enabled: Boolean(workspaceId),
     queryFn: async () => {
       const { data, error } = await supabase
         .from("campaigns")
         .select("*")
+        .eq("workspace_id", workspaceId!)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data ?? [];

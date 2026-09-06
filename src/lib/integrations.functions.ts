@@ -276,7 +276,7 @@ export const getGoogleOAuthUrl = createServerFn({ method: "POST" })
       const { data: ws } = await context.supabase
         .from("workspaces")
         .select("id")
-        .eq("user_id", context.userId)
+        .eq("created_by", context.userId)
         .limit(1)
         .maybeSingle();
 

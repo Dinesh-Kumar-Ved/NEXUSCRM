@@ -39,14 +39,45 @@ export function useProfile(user: User | null) {
   });
 }
 
+export type TeamMember = {
+  id: string;
+  full_name: string | null;
+  email: string | null;
+};
+
 export function useTeam() {
   return useTeamForWorkspace(null);
 }
 
-export function useTeamForWorkspace(_workspaceId: string | null) {
-  return useQuery({
-    queryKey: ["team", _workspaceId],
-    queryFn: async () => [],
+export function useTeamForWorkspace(workspaceId: string | null) {
+  return useQuery<TeamMember[]>({
+    queryKey: ["team", workspaceId],
+    enabled: Boolean(workspaceId),
+    queryFn: async () => {
+      // Get all members of this workspace
+      const { data: members, error: membersError } = await supabase
+        .from("workspace_members")
+        .select("user_id")
+        .eq("workspace_id", workspaceId!);
+
+      if (membersError || !members || members.length === 0) {
+        return [];
+      }
+
+      const userIds = members.map((m) => m.user_id);
+
+      // Get their profiles
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, full_name, email")
+        .in("id", userIds);
+
+      if (profilesError || !profiles) {
+        return [];
+      }
+
+      return profiles as TeamMember[];
+    },
   });
 }
 
