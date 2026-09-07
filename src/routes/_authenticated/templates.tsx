@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Copy, FileText, Mail, MessageSquare, Pencil, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { useAuth, useWorkspace } from "@/hooks/use-auth";
+import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { PERSONALIZATION_TOKENS, personalize, type Channel } from "@/lib/crm";
 
@@ -46,21 +46,17 @@ type Template = {
 
 export function TemplatesPage() {
   const { user } = useAuth();
-  const { data: workspace } = useWorkspace(user?.id);
-  const workspaceId = workspace?.workspace_id ?? null;
   const queryClient = useQueryClient();
   const [selectedChannel, setSelectedChannel] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
 
   const templatesQuery = useQuery({
-    queryKey: ["templates", workspaceId],
-    enabled: Boolean(workspaceId),
+    queryKey: ["templates"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("templates")
         .select("*")
-        .eq("workspace_id", workspaceId!)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as Template[];
@@ -115,6 +111,14 @@ export function TemplatesPage() {
 
       {templatesQuery.isLoading ? (
         <p className="text-sm text-muted-foreground">Loading templates...</p>
+      ) : templatesQuery.isError ? (
+        <Card>
+          <CardContent className="py-6 text-center text-sm text-destructive">
+            {templatesQuery.error instanceof Error
+              ? templatesQuery.error.message
+              : "Failed to load templates. Please try again."}
+          </CardContent>
+        </Card>
       ) : templates.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
@@ -192,7 +196,6 @@ export function TemplatesPage() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         template={editingTemplate}
-        workspaceId={workspaceId}
         onSaved={() => void queryClient.invalidateQueries({ queryKey: ["templates"] })}
       />
     </div>
@@ -204,14 +207,13 @@ function TemplateDialog({
   onOpenChange,
   template,
   onSaved,
-  workspaceId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   template: Template | null;
   onSaved: () => void;
-  workspaceId: string | null;
 }) {
+  const { user } = useAuth();
   const [name, setName] = useState(template?.name ?? "");
   const [channel, setChannel] = useState<Exclude<Channel, "call">>(
     (template?.channel as Exclude<Channel, "call">) || "email",
@@ -221,7 +223,7 @@ function TemplateDialog({
   const [saving, setSaving] = useState(false);
 
   // Sync state on open/edit change
-  useState(() => {
+  useEffect(() => {
     if (template) {
       setName(template.name);
       setChannel((template.channel as Exclude<Channel, "call">) || "email");
@@ -233,7 +235,7 @@ function TemplateDialog({
       setSubject("");
       setBody("Hi {{client_name}},\n\n");
     }
-  });
+  }, [template, open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -261,7 +263,7 @@ function TemplateDialog({
           channel,
           subject: channel === "email" ? subject.trim() || null : null,
           body: body.trim(),
-          workspace_id: workspaceId,
+          created_by: user?.id ?? null,
         });
         if (error) throw error;
         toast.success("Template created");
