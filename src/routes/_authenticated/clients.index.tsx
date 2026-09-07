@@ -2,9 +2,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Mail, Plus, Search, Trash2 } from "lucide-react";
+import { Mail, Plus, Search, Trash2, Upload } from "lucide-react";
 
 import { ClientDialog } from "@/components/client-dialog";
+import { ImportClientsDialog } from "@/components/import-clients-dialog";
 import { NotificationsPopover } from "@/components/notifications-popover";
 import { SendMessageDialog } from "@/components/send-message-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -64,6 +65,7 @@ function ClientsPage() {
   const [emailClient, setEmailClient] = useState<ClientRecord | null>(null);
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [deleteClient, setDeleteClient] = useState<ClientRecord | null>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
@@ -158,6 +160,9 @@ function ClientsPage() {
             workspaceId={workspaceId}
             clients={clientsQuery.data ?? []}
           />
+          <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+            <Upload className="mr-2 size-4" /> Import clients
+          </Button>
           <Button onClick={openAdd}>
             <Plus className="mr-2 size-4" /> Add client
           </Button>
@@ -228,9 +233,14 @@ function ClientsPage() {
                 : "Add your first client to start building your CRM."}
             </p>
             {!debouncedSearch && status === "all" && source === "all" ? (
-              <Button className="mt-4" onClick={openAdd}>
-                <Plus className="mr-2 size-4" /> Add your first client
-              </Button>
+              <div className="flex items-center justify-center gap-2 mt-4">
+                <Button variant="outline" onClick={() => setImportDialogOpen(true)}>
+                  <Upload className="mr-2 size-4" /> Import clients
+                </Button>
+                <Button onClick={openAdd}>
+                  <Plus className="mr-2 size-4" /> Add your first client
+                </Button>
+              </div>
             ) : null}
           </CardContent>
         </Card>
@@ -350,6 +360,12 @@ function ClientsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ImportClientsDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        workspaceId={workspaceId}
+      />
     </div>
   );
 }
