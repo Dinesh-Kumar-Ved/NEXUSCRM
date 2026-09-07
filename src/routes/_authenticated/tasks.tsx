@@ -92,13 +92,11 @@ export function TasksPage() {
   );
 
   const tasksQuery = useQuery({
-    queryKey: ["all-tasks", workspaceId],
-    enabled: Boolean(workspaceId),
+    queryKey: ["all-tasks"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("tasks")
         .select("*")
-        .eq("workspace_id", workspaceId!)
         .order("due_at", { ascending: true, nullsFirst: false });
       if (error) throw error;
       return (data ?? []) as TaskItem[];
@@ -188,6 +186,10 @@ export function TasksPage() {
         <CardContent className="p-0">
           {tasksQuery.isLoading ? (
             <div className="p-8 text-center text-sm text-muted-foreground">Loading tasks...</div>
+          ) : tasksQuery.isError ? (
+            <div className="p-8 text-center text-sm text-destructive">
+              {tasksQuery.error instanceof Error ? tasksQuery.error.message : "Failed to load tasks."}
+            </div>
           ) : filteredTasks.length === 0 ? (
             <div className="py-12 text-center">
               <CheckCircle2 className="mx-auto size-10 text-muted-foreground/50" />
@@ -455,11 +457,12 @@ function CreateTaskModal({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  workspaceId: string | null;
+  workspaceId?: string | null;
   clients: ClientRecord[];
   team: Array<{ id: string; full_name: string | null; email: string | null }>;
   onCreated: () => void;
 }) {
+  const { user } = useAuth();
   const [title, setTitle] = useState("");
   const [clientId, setClientId] = useState<string>("none");
   const [assignedTo, setAssignedTo] = useState<string>("unassigned");
@@ -475,19 +478,22 @@ function CreateTaskModal({
     }
     setSaving(true);
     try {
+      const parsedDueDate = dueDate && dueDate.trim() ? new Date(dueDate).toISOString() : null;
       const { error } = await supabase.from("tasks").insert({
-        workspace_id: workspaceId,
         title: title.trim(),
         client_id: clientId === "none" ? null : clientId,
         assigned_to: assignedTo === "unassigned" ? null : assignedTo,
-        due_at: dueDate ? new Date(dueDate).toISOString() : null,
+        due_at: parsedDueDate,
         notes: notes.trim() || null,
+        created_by: user?.id ?? null,
       });
       if (error) throw error;
       toast.success("Task scheduled");
       setTitle("");
       setNotes("");
       setDueDate("");
+      setClientId("none");
+      setAssignedTo("unassigned");
       onCreated();
       onOpenChange(false);
     } catch (err) {
