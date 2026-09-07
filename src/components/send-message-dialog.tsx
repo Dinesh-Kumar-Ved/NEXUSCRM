@@ -1,6 +1,7 @@
+import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { FileText, Loader2, Paperclip, Send, X } from "lucide-react";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -22,7 +23,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { type Channel, type ClientRecord } from "@/lib/crm";
+import { supabase } from "@/integrations/supabase/client";
+import { personalize, type Channel, type ClientRecord } from "@/lib/crm";
 import { sendClientMessage } from "@/lib/messaging.functions";
 
 export interface ClientEmailAttachment {
@@ -105,8 +107,51 @@ export function SendMessageDialog({
   const [sending, setSending] = useState(false);
   const [attachments, setAttachments] = useState<ClientEmailAttachment[]>([]);
   const [preparingAttachments, setPreparingAttachments] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | undefined>(undefined);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const sendFn = useServerFn(sendClientMessage);
+
+  const {
+    data: templates,
+    isLoading: templatesLoading,
+    isError: templatesError,
+  } = useQuery({
+    queryKey: ["templates"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("templates")
+        .select("*")
+        .order("name");
+      if (error) throw error;
+      return (data ?? []) as Array<{
+        id: string;
+        name: string;
+        channel: string;
+        subject: string | null;
+        body: string;
+      }>;
+    },
+    enabled: open,
+  });
+
+  const emailTemplates = useMemo(
+    () => (templates ?? []).filter((t) => t.channel === "email"),
+    [templates],
+  );
+
+  const handleApplyTemplate = (id: string) => {
+    const tpl = emailTemplates.find((t) => t.id === id);
+    if (!tpl) return;
+    setSelectedTemplateId(tpl.id);
+    if (tpl.subject) {
+      setSubject(personalize(tpl.subject, client));
+    }
+    if (tpl.body) {
+      setBody(personalize(tpl.body, client));
+    }
+    toast.success(`Inserted template "${tpl.name}"`);
+    setTimeout(() => setSelectedTemplateId(undefined), 100);
+  };
 
   useEffect(() => {
     if (open) {
@@ -120,6 +165,7 @@ export function SendMessageDialog({
       );
       setBody(`Hi ${client.name.split(" ")[0] || client.name},\n\n`);
       setSubject("");
+      setSelectedTemplateId(undefined);
       setCcInput("");
       setBccInput("");
       setShowCcBcc(false);
@@ -128,6 +174,7 @@ export function SendMessageDialog({
     } else {
       setAttachments([]);
       setPreparingAttachments(false);
+      setSelectedTemplateId(undefined);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }, [open, client, defaultChannel]);
@@ -135,6 +182,7 @@ export function SendMessageDialog({
   // Adjust default recipient whenever channel changes
   const handleChannelChange = (newChannel: Exclude<Channel, "call">) => {
     setChannel(newChannel);
+    setSelectedTemplateId(undefined);
     if (newChannel === "email") {
       setRecipient(client.email || "");
     } else if (newChannel === "whatsapp") {
@@ -341,7 +389,34 @@ export function SendMessageDialog({
                 )}
 
                 <div>
-                  <Label className="text-xs">Subject</Label>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Subject</Label>
+                    <Select
+                      value={selectedTemplateId ?? ""}
+                      onValueChange={handleApplyTemplate}
+                      disabled={templatesLoading || Boolean(templatesError) || emailTemplates.length === 0}
+                    >
+                      <SelectTrigger className="h-6 w-auto gap-1 border-dashed px-2 py-0 text-[11px] font-normal text-muted-foreground hover:text-foreground">
+                        <FileText className="size-3 text-primary" />
+                        <span>
+                          {templatesLoading
+                            ? "Loading templates..."
+                            : templatesError
+                              ? "Error loading templates"
+                              : emailTemplates.length === 0
+                                ? "No email templates"
+                                : "Insert Template"}
+                        </span>
+                      </SelectTrigger>
+                      <SelectContent align="end">
+                        {emailTemplates.map((t) => (
+                          <SelectItem key={t.id} value={t.id} className="text-xs">
+                            {t.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   <Input
                     className="mt-1 text-xs"
                     value={subject}
