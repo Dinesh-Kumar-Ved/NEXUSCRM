@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Mail, Plus, Search, Trash2, Upload } from "lucide-react";
 
+import { BroadcastDialog } from "@/components/broadcast-dialog";
 import { ClientDialog } from "@/components/client-dialog";
 import { ImportClientsDialog } from "@/components/import-clients-dialog";
 import { NotificationsPopover } from "@/components/notifications-popover";
 import { SendMessageDialog } from "@/components/send-message-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,6 +24,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -66,6 +69,10 @@ function ClientsPage() {
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [deleteClient, setDeleteClient] = useState<ClientRecord | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkMessageOpen, setBulkMessageOpen] = useState(false);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(search.trim().toLowerCase()), 250);
@@ -115,6 +122,68 @@ function ClientsPage() {
     });
   }, [clientsQuery.data, debouncedSearch, source, status]);
 
+  const isAllSelected =
+    filteredClients.length > 0 &&
+    filteredClients.every((client) => selectedIds.includes(client.id));
+  const isSomeSelected =
+    !isAllSelected &&
+    filteredClients.some((client) => selectedIds.includes(client.id));
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      const newIds = new Set(selectedIds);
+      filteredClients.forEach((client) => newIds.add(client.id));
+      setSelectedIds(Array.from(newIds));
+    } else {
+      const filteredIdSet = new Set(filteredClients.map((client) => client.id));
+      setSelectedIds((prev) => prev.filter((id) => !filteredIdSet.has(id)));
+    }
+  };
+
+  const handleToggleClient = (clientId: string, checked: boolean) => {
+    setSelectedIds((prev) =>
+      checked ? [...prev, clientId] : prev.filter((id) => id !== clientId),
+    );
+  };
+
+  const handleSendMessage = () => {
+    if (selectedIds.length === 0) return;
+    if (selectedIds.length === 1) {
+      const client = (clientsQuery.data ?? []).find((c) => c.id === selectedIds[0]);
+      if (client) {
+        setEmailClient(client);
+        setEmailDialogOpen(true);
+        return;
+      }
+    }
+    setBulkMessageOpen(true);
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0 || !workspaceId) return;
+    setIsBulkDeleting(true);
+    try {
+      const { error } = await supabase
+        .from("clients")
+        .delete()
+        .in("id", selectedIds)
+        .eq("workspace_id", workspaceId);
+      if (error) throw error;
+      toast.success(
+        `Deleted ${selectedIds.length} client${selectedIds.length > 1 ? "s" : ""}`,
+      );
+      setSelectedIds([]);
+      setBulkDeleteOpen(false);
+      void queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to delete selected clients",
+      );
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
   const openAdd = () => {
     setSelectedClient(null);
     setDialogOpen(true);
@@ -137,6 +206,7 @@ function ClientsPage() {
       const { error } = await supabase.from("clients").delete().eq("id", deleteClient.id);
       if (error) throw error;
       toast.success("Client deleted");
+      setSelectedIds((prev) => prev.filter((id) => id !== deleteClient.id));
       void queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
       setDeleteClient(null);
     } catch (err) {
@@ -155,7 +225,40 @@ function ClientsPage() {
             Manage the people and companies in your workspace.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {selectedIds.length > 0 && (
+            <div className="flex items-center gap-2 rounded-lg border bg-muted/60 px-3 py-1 shadow-sm animate-in fade-in">
+              <span className="text-xs font-semibold text-foreground whitespace-nowrap">
+                {selectedIds.length} selected
+              </span>
+              <div className="h-3.5 w-px bg-border" />
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 px-2.5 text-xs gap-1.5"
+                onClick={handleSendMessage}
+              >
+                <Mail className="size-3.5" /> Send Message
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                className="h-7 px-2.5 text-xs gap-1.5"
+                onClick={() => setBulkDeleteOpen(true)}
+              >
+                <Trash2 className="size-3.5" /> Delete Selected
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setSelectedIds([])}
+                title="Clear selection"
+              >
+                Clear
+              </Button>
+            </div>
+          )}
           <NotificationsPopover
             workspaceId={workspaceId}
             clients={clientsQuery.data ?? []}
@@ -246,7 +349,14 @@ function ClientsPage() {
         </Card>
       ) : (
         <div className="overflow-hidden rounded-xl border bg-card">
-          <div className="hidden grid-cols-[1.4fr_1fr_1.2fr_1fr_1fr_auto] gap-4 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground lg:grid">
+          <div className="hidden grid-cols-[40px_1.4fr_1fr_1.2fr_1fr_1fr_auto] gap-4 border-b px-4 py-3 text-xs font-medium uppercase tracking-wide text-muted-foreground lg:grid lg:items-center">
+            <div className="flex items-center justify-center">
+              <Checkbox
+                checked={isAllSelected ? true : isSomeSelected ? "indeterminate" : false}
+                onCheckedChange={(checked) => handleSelectAll(Boolean(checked))}
+                aria-label="Select all clients"
+              />
+            </div>
             <span>Name</span>
             <span>Company</span>
             <span>Email</span>
@@ -254,62 +364,81 @@ function ClientsPage() {
             <span>Source</span>
             <span />
           </div>
-          {filteredClients.map((client) => (
-            <div
-              key={client.id}
-              onClick={() => navigate({ to: "/clients/$clientId", params: { clientId: client.id } })}
-              className="grid cursor-pointer gap-3 border-b px-4 py-4 last:border-b-0 hover:bg-muted/40 transition-colors lg:grid-cols-[1.4fr_1fr_1.2fr_1fr_1fr_auto] lg:items-center lg:gap-4"
-            >
-              <div className="min-w-0">
-                <Link
-                  to="/clients/$clientId"
-                  params={{ clientId: client.id }}
-                  className="text-sm font-semibold text-foreground hover:text-primary hover:underline"
+          {filteredClients.map((client) => {
+            const isSelected = selectedIds.includes(client.id);
+            return (
+              <div
+                key={client.id}
+                onClick={() => navigate({ to: "/clients/$clientId", params: { clientId: client.id } })}
+                className={cn(
+                  "grid cursor-pointer gap-3 border-b px-4 py-4 last:border-b-0 hover:bg-muted/40 transition-colors lg:grid-cols-[40px_1.4fr_1fr_1.2fr_1fr_1fr_auto] lg:items-center lg:gap-4",
+                  isSelected && "bg-primary/5",
+                )}
+              >
+                <div
+                  className="flex items-center lg:justify-center"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {client.name}
-                </Link>
-                <p className="text-xs text-muted-foreground">
-                  Updated {formatDate(client.updated_at)}
-                </p>
-              </div>
-              <p className="truncate text-sm">{client.company || "—"}</p>
-              <p className="truncate text-sm text-muted-foreground">{client.email || "—"}</p>
-              <Badge variant="outline" className="w-fit">
-                {STATUS_LABELS[client.status]}
-              </Badge>
-              <p className="text-sm text-muted-foreground">{client.source || "—"}</p>
-              <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5"
-                  onClick={() => {
-                    setEmailClient(client);
-                    setEmailDialogOpen(true);
-                  }}
-                  title={`Send email to ${client.name}`}
-                  aria-label={`Send email to ${client.name}`}
-                >
-                  <Mail className="size-3.5" />
-                  Email
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => openEdit(client)}>
-                  Edit
-                </Button>
-                {profile?.isAdmin ? (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Delete ${client.name}`}
-                    onClick={() => setDeleteClient(client)}
+                  <Checkbox
+                    checked={isSelected}
+                    onCheckedChange={(checked) => handleToggleClient(client.id, Boolean(checked))}
+                    aria-label={`Select ${client.name}`}
+                  />
+                  <span className="ml-2 text-xs font-medium text-muted-foreground lg:hidden">
+                    Select
+                  </span>
+                </div>
+                <div className="min-w-0">
+                  <Link
+                    to="/clients/$clientId"
+                    params={{ clientId: client.id }}
+                    className="text-sm font-semibold text-foreground hover:text-primary hover:underline"
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    <Trash2 className="size-4 text-destructive" />
+                    {client.name}
+                  </Link>
+                  <p className="text-xs text-muted-foreground">
+                    Updated {formatDate(client.updated_at)}
+                  </p>
+                </div>
+                <p className="truncate text-sm">{client.company || "—"}</p>
+                <p className="truncate text-sm text-muted-foreground">{client.email || "—"}</p>
+                <Badge variant="outline" className="w-fit">
+                  {STATUS_LABELS[client.status]}
+                </Badge>
+                <p className="text-sm text-muted-foreground">{client.source || "—"}</p>
+                <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => {
+                      setEmailClient(client);
+                      setEmailDialogOpen(true);
+                    }}
+                    title={`Send email to ${client.name}`}
+                    aria-label={`Send email to ${client.name}`}
+                  >
+                    <Mail className="size-3.5" />
+                    Email
                   </Button>
-                ) : null}
+                  <Button variant="outline" size="sm" onClick={() => openEdit(client)}>
+                    Edit
+                  </Button>
+                  {profile?.isAdmin ? (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label={`Delete ${client.name}`}
+                      onClick={() => setDeleteClient(client)}
+                    >
+                      <Trash2 className="size-4 text-destructive" />
+                    </Button>
+                  ) : null}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -331,9 +460,20 @@ function ClientsPage() {
           defaultChannel="email"
           onSent={() => {
             void queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
+            setSelectedIds((prev) => prev.filter((id) => id !== emailClient.id));
           }}
         />
       )}
+      <BroadcastDialog
+        open={bulkMessageOpen}
+        onOpenChange={(open) => {
+          setBulkMessageOpen(open);
+          if (!open) {
+            void queryClient.invalidateQueries({ queryKey: ["clients", workspaceId] });
+          }
+        }}
+        clientIds={selectedIds}
+      />
       <AlertDialog
         open={Boolean(deleteClient)}
         onOpenChange={(open) => !open && !isDeleting && setDeleteClient(null)}
@@ -356,6 +496,37 @@ function ClientsPage() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               {isDeleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={bulkDeleteOpen}
+        onOpenChange={(open) => !open && !isBulkDeleting && setBulkDeleteOpen(false)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {selectedIds.length} selected {selectedIds.length === 1 ? "client" : "clients"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to permanently delete {selectedIds.length} selected {selectedIds.length === 1 ? "client" : "clients"}? All associated history, messages, and records will be deleted. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isBulkDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isBulkDeleting}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleBulkDelete();
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isBulkDeleting
+                ? "Deleting..."
+                : `Delete ${selectedIds.length} ${selectedIds.length === 1 ? "client" : "clients"}`}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
