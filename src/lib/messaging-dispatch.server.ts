@@ -353,24 +353,49 @@ export async function runCampaign(
 ) {
   const clients = await loadClients(args.supabase, args.clientIds);
 
-  const { data: campaign, error: campaignError } = await args.supabase
+  // Derive workspace_id from the loaded clients (all clients belong to the same workspace)
+  const workspaceId = clients[0]?.workspace_id ?? null;
+
+  // Build the campaign insert payload. workspace_id is included when available
+  // (requires the 20260908000000 migration). If the column doesn't exist yet,
+  // Supabase returns a "column does not exist" error and we retry without it.
+  const basePayload = {
+    name: args.campaignName,
+    channel: args.channel,
+    subject: args.subject ?? null,
+    body: args.body,
+    recipient_count: clients.length,
+    status: "sending" as const,
+    created_by: args.userId,
+  };
+
+  let insertResult = await args.supabase
     .from("campaigns")
-    .insert({
-      name: args.campaignName,
-      channel: args.channel,
-      subject: args.subject ?? null,
-      body: args.body,
-      recipient_count: clients.length,
-      status: "sending",
-      created_by: args.userId,
-    })
+    .insert({ ...basePayload, workspace_id: workspaceId })
     .select("id")
     .single();
+
+  // If the column doesn't exist yet (pre-migration), retry without workspace_id
+  if (
+    insertResult.error &&
+    (insertResult.error.message?.includes("workspace_id") ||
+      insertResult.error.code === "42703")
+  ) {
+    console.warn(
+      "[BROADCAST_DISPATCH] campaigns.workspace_id column not found – inserting without it. Run the 20260908000000 migration to fix Campaign History.",
+    );
+    insertResult = await args.supabase
+      .from("campaigns")
+      .insert(basePayload)
+      .select("id")
+      .single();
+  }
+
+  const { data: campaign, error: campaignError } = insertResult;
   if (campaignError) throw new Error(campaignError.message);
 
   // If campaign attachments are provided, store records in campaign_attachments table
-  if (args.attachments && args.attachments.length > 0 && clients[0]?.workspace_id) {
-    const workspaceId = clients[0].workspace_id;
+  if (args.attachments && args.attachments.length > 0 && workspaceId) {
     for (const att of args.attachments) {
       const cleanLen = att.contentBase64.replace(/\s+/g, "").replace(/=+$/, "").length;
       const sizeBytes = Math.floor((cleanLen * 3) / 4);
@@ -570,12 +595,12 @@ export async function removeCampaign(args: BaseArgs & { campaignId: string }) {
 }
 
 export async function removeAllCampaigns(args: BaseArgs) {
-  const client = supabaseAdmin || args.supabase;
-  const { error } = await (client as any)
+  // Filter by created_by (userId) until the workspace_id column migration is applied.
+  // After the migration, workspace_id-based filtering can be restored.
+  const { error } = await args.supabase
     .from("campaigns")
     .delete()
-    .neq("id", "00000000-0000-0000-0000-000000000000");
+    .eq("created_by", args.userId);
   if (error) throw new Error(error.message);
   return { ok: true };
 }
-

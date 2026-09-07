@@ -43,6 +43,10 @@ export function CampaignsPage() {
   const { data: workspace } = useWorkspace(user?.id);
   const workspaceId = workspace?.workspace_id ?? null;
 
+  // user?.id is the auth user id — campaigns are filtered by created_by until the
+  // workspace_id column migration is applied (see supabase/migrations/20260908000000_*).
+  const userId = user?.id ?? null;
+
   const [broadcastOpen, setBroadcastOpen] = useState(false);
   const [deletingCampaign, setDeletingCampaign] = useState<{ id: string; name: string } | null>(
     null,
@@ -67,13 +71,15 @@ export function CampaignsPage() {
   });
 
   const campaignsQuery = useQuery({
-    queryKey: ["campaigns", workspaceId],
-    enabled: Boolean(workspaceId),
+    queryKey: ["campaigns", userId],
+    enabled: Boolean(userId),
     queryFn: async () => {
+      // Filter by created_by (user ID) until the workspace_id column migration is applied.
+      // After the migration, RLS policies enforce workspace isolation automatically.
       const { data, error } = await supabase
         .from("campaigns")
         .select("*")
-        .eq("workspace_id", workspaceId!)
+        .eq("created_by", userId!)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
