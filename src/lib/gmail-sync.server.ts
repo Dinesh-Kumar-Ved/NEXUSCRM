@@ -4,6 +4,7 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { refreshGmailAccessToken, fetchGmailProfile } from "./google-auth.server";
 import { decryptToken } from "./crypto";
+import { parseClientEmails } from "./email-utils";
 import type { Database } from "@/integrations/supabase/types";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -350,7 +351,11 @@ export async function syncGmailForWorkspace(workspaceId: string): Promise<GmailS
 
   const emailToClient: Record<string, string> = {};
   clients?.forEach((c) => {
-    if (c.email) emailToClient[c.email.trim().toLowerCase()] = c.id;
+    if (c.email) {
+      for (const email of parseClientEmails(c.email)) {
+        emailToClient[email.toLowerCase()] = c.id;
+      }
+    }
   });
 
   console.log(`[GMAIL_DEBUG_CLIENT]\nworkspaceId=${workspaceId}\nclientCount=${clients?.length ?? 0}\nclientEmails=${JSON.stringify(Object.keys(emailToClient))}`);

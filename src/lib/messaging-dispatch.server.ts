@@ -7,6 +7,8 @@ import { personalize, type ClientRecord } from "./crm";
 import { placeCall, sendEmail, sendSms, sendWhatsApp, type SendResult } from "./messaging.server";
 import type { EmailAttachment } from "./google-auth.server";
 
+import { clientHasEmail, getPrimaryEmail, parseClientEmails } from "./email-utils";
+
 type Client = SupabaseClient<Database>;
 type Channel = "email" | "sms" | "whatsapp";
 
@@ -16,7 +18,7 @@ interface BaseArgs {
 }
 
 function recipientFor(client: ClientRecord, channel: Channel): string | null {
-  if (channel === "email") return client.email;
+  if (channel === "email") return getPrimaryEmail(client.email);
   if (channel === "whatsapp") return client.whatsapp ?? client.phone;
   return client.phone;
 }
@@ -196,6 +198,7 @@ export async function deliverToClient(
   args: BaseArgs & {
     clientId: string;
     channel: Channel;
+    recipientMode?: "primary" | "additional" | "all" | "specific" | string | undefined;
     to?: string | undefined;
     cc?: string[] | undefined;
     bcc?: string[] | undefined;
@@ -211,132 +214,202 @@ export async function deliverToClient(
   const [client] = await loadClients(args.supabase, [args.clientId]);
   if (!client) throw new Error("Client not found");
 
-  const to = args.to?.trim() || recipientFor(client, args.channel);
-  if (!to) {
-    return { ok: false, error: `This client has no ${args.channel} contact details.` };
-  }
   if (optedOut(client, args.channel)) {
     return { ok: false, error: "This client has opted out of this channel." };
   }
-  if (args.channel === "email" && (!to.includes("@") || !to.includes("."))) {
-    return { ok: false, error: `Invalid recipient email address: "${to}"` };
+
+  let recipientsToDeliver: string[] = [];
+
+  if (args.channel === "email") {
+    const clientEmails = parseClientEmails(client.email);
+    if (clientEmails.length === 0) {
+      return { ok: false, error: "This client has no valid email contact details." };
+    }
+
+    const mode = args.recipientMode || (args.to === "ALL" ? "all" : args.to === "PRIMARY" ? "primary" : args.to ? "specific" : "primary");
+
+    if (mode === "all") {
+      recipientsToDeliver = clientEmails;
+    } else if (mode === "primary") {
+      const primary = getPrimaryEmail(client.email);
+      recipientsToDeliver = primary ? [primary] : [];
+    } else if (mode === "additional") {
+      recipientsToDeliver = clientEmails.slice(1);
+    } else {
+      // mode === "specific" or custom email target passed in args.to
+      const targetTo = args.to?.trim();
+      if (!targetTo) {
+        return { ok: false, error: "No target email specified." };
+      }
+      // Server security check: Ensure the target email actually belongs to this client!
+      if (!clientHasEmail(client.email, targetTo)) {
+        return { ok: false, error: `Recipient email "${targetTo}" does not belong to client ${client.name}.` };
+      }
+      recipientsToDeliver = [targetTo];
+    }
+  } else {
+    const to = args.to?.trim() || recipientFor(client, args.channel);
+    if (!to) {
+      return { ok: false, error: `This client has no ${args.channel} contact details.` };
+    }
+    recipientsToDeliver = [to];
   }
 
-  const body = personalize(args.body, client);
-  const subject = personalize(args.subject ?? "", client);
+  if (recipientsToDeliver.length === 0) {
+    return { ok: false, error: `No valid recipients found for ${args.channel}.` };
+  }
 
-  console.log(
-    `[DIRECT_DISPATCH] Client: ${client.id} | Channel: ${args.channel} | To: ${to} | Subject: "${subject || "Message from your account team"}" | Attachments: ${args.attachments?.length ?? 0}`,
-  );
+  // Deduplicate target recipients (case-insensitive deduplication, keeping trimmed case)
+  const seenLower = new Set<string>();
+  const uniqueRecipients: string[] = [];
+  for (const r of recipientsToDeliver) {
+    const trimmed = r.trim();
+    const lower = trimmed.toLowerCase();
+    if (!seenLower.has(lower)) {
+      seenLower.add(lower);
+      uniqueRecipients.push(trimmed);
+    }
+  }
 
-  const result = await deliver(
-    args.supabase,
-    client.workspace_id,
-    args.channel,
-    to,
-    subject || "Message from your account team",
-    body,
-    {
-      cc: args.cc,
-      bcc: args.bcc,
-      html: args.html ? personalize(args.html, client) : undefined,
-      attachments: args.attachments,
-      threadId: args.threadId,
-      inReplyTo: args.inReplyTo,
-      references: args.references,
-    },
-  );
+  let lastResult: SendResult = { ok: false, status: "failed", provider: "none", error: "No delivery performed" };
+  let successCount = 0;
+  let failCount = 0;
+  const errors: string[] = [];
 
-  await recordMessage({
-    supabase: args.supabase,
-    userId: args.userId,
-    clientId: client.id,
-    channel: args.channel,
-    subject: args.channel === "email" ? subject : null,
-    body,
-    to,
-    result,
-  });
+  for (const to of uniqueRecipients) {
+    if (args.channel === "email" && (!to.includes("@") || !to.includes("."))) {
+      failCount++;
+      errors.push(`Invalid recipient email address: "${to}"`);
+      continue;
+    }
 
-  if (args.channel === "email" && result.ok && client.workspace_id) {
-    const now = new Date();
-    const messageId = result.providerMessageId ?? `outbound_${Date.now()}`;
-    const threadId = (result as any).threadId ?? messageId;
+    const body = personalize(args.body, client);
+    const subject = personalize(args.subject ?? "", client);
 
-    const processedAttachments: Array<{
-      filename: string;
-      mimeType: string;
-      size: number;
-      storagePath?: string;
-    }> = [];
+    console.log(
+      `[DIRECT_DISPATCH] Client: ${client.id} | Channel: ${args.channel} | To: ${to} | Subject: "${subject || "Message from your account team"}" | Attachments: ${args.attachments?.length ?? 0}`,
+    );
 
-    if (args.attachments && args.attachments.length > 0) {
-      for (const att of args.attachments) {
-        const cleanLen = att.contentBase64.replace(/\s+/g, "").replace(/=+$/, "").length;
-        const sizeBytes = Math.floor((cleanLen * 3) / 4);
-        const safeName = att.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
-        const storagePath = `${client.workspace_id}/${messageId}/${safeName}`;
+    const result = await deliver(
+      args.supabase,
+      client.workspace_id,
+      args.channel,
+      to,
+      subject || "Message from your account team",
+      body,
+      {
+        cc: args.cc,
+        bcc: args.bcc,
+        html: args.html ? personalize(args.html, client) : undefined,
+        attachments: args.attachments,
+        threadId: args.threadId,
+        inReplyTo: args.inReplyTo,
+        references: args.references,
+      },
+    );
 
-        try {
-          const buffer = Buffer.from(att.contentBase64, "base64");
-          await supabaseAdmin.storage
-            .from("email-attachments")
-            .upload(storagePath, buffer, {
-              contentType: att.mimeType,
-              upsert: true,
+    await recordMessage({
+      supabase: args.supabase,
+      userId: args.userId,
+      clientId: client.id,
+      channel: args.channel,
+      subject: args.channel === "email" ? subject : null,
+      body,
+      to,
+      result,
+    });
+
+    if (args.channel === "email" && result.ok && client.workspace_id) {
+      const now = new Date();
+      const messageId = result.providerMessageId ?? `outbound_${Date.now()}`;
+      const threadId = (result as any).threadId ?? messageId;
+
+      const processedAttachments: Array<{
+        filename: string;
+        mimeType: string;
+        size: number;
+        storagePath?: string;
+      }> = [];
+
+      if (args.attachments && args.attachments.length > 0) {
+        for (const att of args.attachments) {
+          const cleanLen = att.contentBase64.replace(/\s+/g, "").replace(/=+$/, "").length;
+          const sizeBytes = Math.floor((cleanLen * 3) / 4);
+          const safeName = att.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+          const storagePath = `${client.workspace_id}/${messageId}/${safeName}`;
+
+          try {
+            const buffer = Buffer.from(att.contentBase64, "base64");
+            await supabaseAdmin.storage
+              .from("email-attachments")
+              .upload(storagePath, buffer, {
+                contentType: att.mimeType,
+                upsert: true,
+              });
+
+            processedAttachments.push({
+              filename: att.filename,
+              mimeType: att.mimeType,
+              size: sizeBytes,
+              storagePath,
             });
-
-          processedAttachments.push({
-            filename: att.filename,
-            mimeType: att.mimeType,
-            size: sizeBytes,
-            storagePath,
-          });
-        } catch (attErr) {
-          console.warn("Could not upload attachment to storage:", attErr);
-          processedAttachments.push({
-            filename: att.filename,
-            mimeType: att.mimeType,
-            size: sizeBytes,
-          });
+          } catch (attErr) {
+            console.warn("Could not upload attachment to storage:", attErr);
+            processedAttachments.push({
+              filename: att.filename,
+              mimeType: att.mimeType,
+              size: sizeBytes,
+            });
+          }
         }
+      }
+
+      try {
+        await (supabaseAdmin as unknown as any)
+          .from("email_messages")
+          .insert({
+            workspace_id: client.workspace_id,
+            client_id: client.id,
+            thread_id: threadId,
+            provider_message_id: messageId,
+            rfc_message_id: "",
+            direction: "outbound",
+            from_email: "me",
+            from_name: "You",
+            to_email: to,
+            cc: args.cc ? args.cc.join(", ") : null,
+            bcc: args.bcc ? args.bcc.join(", ") : null,
+            subject: subject || "(No Subject)",
+            body_text: body,
+            body_html: args.html ? personalize(args.html, client) : `<p>${body.replace(/\n/g, "<br/>")}</p>`,
+            attachments: processedAttachments,
+            in_reply_to: args.inReplyTo ?? null,
+            references: args.references ?? null,
+            sent_at: now,
+            received_at: now,
+          });
+      } catch (insertErr) {
+        console.error("[MESSAGING_DISPATCH] Failed to record outbound email in email_messages:", insertErr);
       }
     }
 
-    try {
-      await (supabaseAdmin as unknown as any)
-        .from("email_messages")
-        .insert({
-          workspace_id: client.workspace_id,
-          client_id: client.id,
-          thread_id: threadId,
-          provider_message_id: messageId,
-          rfc_message_id: "",
-          direction: "outbound",
-          from_email: "me",
-          from_name: "You",
-          to_email: to,
-          cc: args.cc ? args.cc.join(", ") : null,
-          bcc: args.bcc ? args.bcc.join(", ") : null,
-          subject: subject || "(No Subject)",
-          body_text: body,
-          body_html: args.html ? personalize(args.html, client) : `<p>${body.replace(/\n/g, "<br/>")}</p>`,
-          attachments: processedAttachments,
-          in_reply_to: args.inReplyTo ?? null,
-          references: args.references ?? null,
-          sent_at: now,
-          received_at: now,
-        });
-    } catch (insertErr) {
-      console.error("[MESSAGING_DISPATCH] Failed to record outbound email in email_messages:", insertErr);
+    lastResult = result;
+    if (result.ok) {
+      successCount++;
+    } else {
+      failCount++;
+      if (result.error) errors.push(result.error);
     }
   }
 
   return {
-    ok: result.ok,
-    error: result.error ?? null,
-    status: result.status,
-    providerMessageId: result.providerMessageId,
+    ok: successCount > 0,
+    error: errors.length > 0 ? errors.join("; ") : lastResult.error ?? null,
+    status: successCount > 0 ? "sent" : "failed",
+    providerMessageId: lastResult.providerMessageId,
+    recipientCount: uniqueRecipients.length,
+    successCount,
+    failCount,
   };
 }
 

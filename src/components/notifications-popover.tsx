@@ -14,6 +14,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { formatDateTime, type ClientRecord } from "@/lib/crm";
+import { parseClientEmails } from "@/lib/email-utils";
 
 interface NotificationItem {
   id: string;
@@ -63,7 +64,9 @@ export function NotificationsPopover({ workspaceId, clients }: NotificationsPopo
     const map = new Map<string, ClientRecord>();
     for (const c of clients) {
       if (c.email) {
-        map.set(c.email.toLowerCase().trim(), c);
+        for (const e of parseClientEmails(c.email)) {
+          map.set(e.toLowerCase(), c);
+        }
       }
     }
     return map;

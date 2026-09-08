@@ -61,6 +61,7 @@ const sendSchema = z
   .object({
     clientId: z.string().uuid(),
     channel: channelSchema,
+    recipientMode: z.enum(["primary", "additional", "all", "specific"]).optional(),
     to: z.string().optional(),
     cc: z.array(z.string()).optional(),
     bcc: z.array(z.string()).optional(),
@@ -142,6 +143,7 @@ export const sendClientMessage = createServerFn({ method: "POST" })
       userId: context.userId,
       clientId: data.clientId,
       channel: data.channel,
+      recipientMode: data.recipientMode,
       to: data.to,
       cc: data.cc,
       bcc: data.bcc,

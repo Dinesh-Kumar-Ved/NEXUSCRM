@@ -30,6 +30,8 @@ import {
   type DealStatus,
 } from "@/lib/crm";
 
+import { formatClientEmails, getInvalidEmails, parseClientEmails } from "@/lib/email-utils";
+
 type FieldErrors = {
   name?: string;
   email?: string;
@@ -135,15 +137,17 @@ export function ClientDialog({
       }
       if (!workspaceId) throw new Error("Workspace is still loading. Please try again.");
       const name = form.name.trim();
-      const email = form.email.trim();
+      const rawEmail = form.email.trim();
       if (!name) throw new Error("Full name is required.");
-      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        throw new Error("Please enter a valid email address.");
+      const invalidEmails = getInvalidEmails(rawEmail);
+      if (invalidEmails.length > 0) {
+        throw new Error(`Invalid email address format: ${invalidEmails.join(", ")}`);
       }
+      const formattedEmail = formatClientEmails(rawEmail);
       const payload = {
         name,
         company: form.company.trim() || null,
-        email: email || null,
+        email: formattedEmail,
         phone: form.phone.trim() || null,
         whatsapp: form.whatsapp.trim() || null,
         website: form.website.trim() || null,
@@ -227,8 +231,9 @@ export function ClientDialog({
   const submit = () => {
     const nextErrors: FieldErrors = {};
     if (!form.name.trim()) nextErrors.name = "Full name is required.";
-    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
-      nextErrors.email = "Enter a valid email address.";
+    const invalidEmails = getInvalidEmails(form.email);
+    if (invalidEmails.length > 0) {
+      nextErrors.email = `Invalid email address(es): ${invalidEmails.join(", ")}`;
     }
     setFieldErrors(nextErrors);
     if (Object.keys(nextErrors).length > 0) return;
@@ -262,12 +267,13 @@ export function ClientDialog({
               onChange={(e) => setForm({ ...form, company: e.target.value })}
             />
           </Field>
-          <Field label="Email">
+          <Field label="Email (comma-separated for multiple)">
             <Input
-              type="email"
+              type="text"
               aria-invalid={Boolean(fieldErrors.email)}
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
+              placeholder="primary@example.com, alt@example.com"
             />
             {fieldErrors.email ? (
               <p className="text-xs text-destructive">{fieldErrors.email}</p>

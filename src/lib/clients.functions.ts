@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import type { DealStatus } from "./crm";
+import { formatClientEmails, parseClientEmails } from "./email-utils";
 
 const clientImportItemSchema = z.object({
   name: z.string().trim().min(1, "Name is required"),
@@ -65,7 +66,11 @@ export const importClientsServerFn = createServerFn({ method: "POST" })
     const existingPhones = new Set<string>();
 
     for (const c of existingClients || []) {
-      if (c.email) existingEmails.add(c.email.trim().toLowerCase());
+      if (c.email) {
+        for (const e of parseClientEmails(c.email)) {
+          existingEmails.add(e.toLowerCase());
+        }
+      }
       if (c.phone) {
         const cleaned = c.phone.replace(/[^0-9+]/g, "");
         if (cleaned) existingPhones.add(cleaned);
@@ -94,14 +99,16 @@ export const importClientsServerFn = createServerFn({ method: "POST" })
     let skippedDuplicates = 0;
 
     for (const client of data.clients) {
-      const email = client.email ? client.email.trim().toLowerCase() : null;
+      const clientEmails = parseClientEmails(client.email);
       const phoneClean = client.phone ? client.phone.replace(/[^0-9+]/g, "") : null;
 
-      // Duplicate check
+      // Duplicate check: check if any of client's emails exist in CRM or batch
       let isDuplicate = false;
-      if (email) {
-        if (existingEmails.has(email) || seenEmailsInBatch.has(email)) {
+      for (const email of clientEmails) {
+        const lower = email.toLowerCase();
+        if (existingEmails.has(lower) || seenEmailsInBatch.has(lower)) {
           isDuplicate = true;
+          break;
         }
       }
       if (!isDuplicate && phoneClean) {
@@ -115,7 +122,9 @@ export const importClientsServerFn = createServerFn({ method: "POST" })
         continue;
       }
 
-      if (email) seenEmailsInBatch.add(email);
+      for (const email of clientEmails) {
+        seenEmailsInBatch.add(email.toLowerCase());
+      }
       if (phoneClean) seenPhonesInBatch.add(phoneClean);
 
       toInsert.push({
@@ -123,7 +132,7 @@ export const importClientsServerFn = createServerFn({ method: "POST" })
         created_by: context.userId,
         name: client.name,
         company: client.company || null,
-        email: email || null,
+        email: formatClientEmails(clientEmails),
         phone: client.phone || null,
         whatsapp: client.whatsapp || null,
         website: client.website || null,

@@ -26,6 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { personalize, type Channel, type ClientRecord } from "@/lib/crm";
 import { sendClientMessage } from "@/lib/messaging.functions";
+import { getAdditionalEmails, getPrimaryEmail, parseClientEmails } from "@/lib/email-utils";
 
 export interface ClientEmailAttachment {
   filename: string;
@@ -97,8 +98,13 @@ export function SendMessageDialog({
   defaultChannel?: Exclude<Channel, "call">;
   onSent?: () => void;
 }) {
+  const clientEmails = useMemo(() => parseClientEmails(client.email), [client.email]);
+  const primaryEmail = useMemo(() => getPrimaryEmail(client.email), [client.email]);
+  const additionalEmails = useMemo(() => getAdditionalEmails(client.email), [client.email]);
+
   const [channel, setChannel] = useState<Exclude<Channel, "call">>(defaultChannel);
-  const [recipient, setRecipient] = useState(client.email || "");
+  const [targetEmailOption, setTargetEmailOption] = useState<string>("primary");
+  const [recipient, setRecipient] = useState(primaryEmail || client.email || "");
   const [showCcBcc, setShowCcBcc] = useState(false);
   const [ccInput, setCcInput] = useState("");
   const [bccInput, setBccInput] = useState("");
@@ -156,9 +162,10 @@ export function SendMessageDialog({
   useEffect(() => {
     if (open) {
       setChannel(defaultChannel);
+      setTargetEmailOption("primary");
       setRecipient(
         defaultChannel === "email"
-          ? client.email || ""
+          ? primaryEmail || client.email || ""
           : defaultChannel === "whatsapp"
             ? client.whatsapp || client.phone || ""
             : client.phone || "",
@@ -177,7 +184,7 @@ export function SendMessageDialog({
       setSelectedTemplateId(undefined);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  }, [open, client, defaultChannel]);
+  }, [open, client, defaultChannel, primaryEmail]);
 
   // Adjust default recipient whenever channel changes
   const handleChannelChange = (newChannel: Exclude<Channel, "call">) => {
@@ -281,11 +288,29 @@ export function SendMessageDialog({
             }))
           : undefined;
 
+      let mode: "primary" | "additional" | "all" | "specific" = "primary";
+      let targetTo: string | undefined = undefined;
+
+      if (targetEmailOption === "all") {
+        mode = "all";
+        targetTo = "ALL";
+      } else if (targetEmailOption === "primary") {
+        mode = "primary";
+        targetTo = primaryEmail || undefined;
+      } else if (targetEmailOption.startsWith("specific:")) {
+        mode = "specific";
+        targetTo = targetEmailOption.replace("specific:", "");
+      } else {
+        mode = "specific";
+        targetTo = recipient.trim() || undefined;
+      }
+
       const result = await sendFn({
         data: {
           clientId: client.id,
           channel,
-          to: channel === "email" ? recipient.trim() : undefined,
+          recipientMode: mode,
+          to: channel === "email" ? targetTo : undefined,
           cc: ccList.length > 0 ? ccList : undefined,
           bcc: bccList.length > 0 ? bccList : undefined,
           subject: channel === "email" ? (subject.trim() || "Message from your account team") : undefined,
@@ -295,7 +320,8 @@ export function SendMessageDialog({
       });
 
       if (result.ok) {
-        toast.success(`Message dispatched successfully to ${recipient || client.name}`);
+        const count = result.successCount ?? 1;
+        toast.success(`Message dispatched successfully to ${count} email address${count > 1 ? "es" : ""}`);
         if (onSent) onSent();
         onOpenChange(false);
       } else {
@@ -332,7 +358,7 @@ export function SendMessageDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="email">
-                    Email ({client.email || "Custom recipient"})
+                    Email ({primaryEmail || client.email || "Custom recipient"})
                   </SelectItem>
                   <SelectItem value="sms">SMS ({client.phone || "No phone"})</SelectItem>
                   <SelectItem value="whatsapp">
@@ -344,26 +370,72 @@ export function SendMessageDialog({
 
             {channel === "email" && (
               <div className="space-y-3 rounded-lg border bg-muted/20 p-3">
-                <div>
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs">To (Recipient Email)</Label>
-                    <button
-                      type="button"
-                      onClick={() => setShowCcBcc(!showCcBcc)}
-                      className="text-[11px] text-primary hover:underline"
+                {clientEmails.length > 1 ? (
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">To (Recipient Email)</Label>
+                      <button
+                        type="button"
+                        onClick={() => setShowCcBcc(!showCcBcc)}
+                        className="text-[11px] text-primary hover:underline"
+                      >
+                        {showCcBcc ? "Hide CC/BCC" : "Add CC/BCC"}
+                      </button>
+                    </div>
+                    <Select
+                      value={targetEmailOption}
+                      onValueChange={(val) => {
+                        setTargetEmailOption(val);
+                        if (val === "primary") setRecipient(primaryEmail || "");
+                        else if (val.startsWith("specific:")) setRecipient(val.replace("specific:", ""));
+                        else if (val === "all") setRecipient(clientEmails.join(", "));
+                      }}
                     >
-                      {showCcBcc ? "Hide CC/BCC" : "Add CC/BCC"}
-                    </button>
+                      <SelectTrigger className="mt-1 font-mono text-xs">
+                        <SelectValue placeholder="Select email recipient" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="primary">
+                          Primary email ({primaryEmail})
+                        </SelectItem>
+                        {additionalEmails.map((email) => (
+                          <SelectItem key={email} value={`specific:${email}`}>
+                            Additional email ({email})
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="all">
+                          All email addresses ({clientEmails.length} emails)
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {targetEmailOption === "all" && (
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Will send independently to: <span className="font-mono text-foreground/80">{clientEmails.join(", ")}</span>
+                      </p>
+                    )}
                   </div>
-                  <Input
-                    className="mt-1 font-mono text-xs"
-                    type="email"
-                    value={recipient}
-                    onChange={(e) => setRecipient(e.target.value)}
-                    placeholder="recipient@example.com"
-                    required
-                  />
-                </div>
+                ) : (
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">To (Recipient Email)</Label>
+                      <button
+                        type="button"
+                        onClick={() => setShowCcBcc(!showCcBcc)}
+                        className="text-[11px] text-primary hover:underline"
+                      >
+                        {showCcBcc ? "Hide CC/BCC" : "Add CC/BCC"}
+                      </button>
+                    </div>
+                    <Input
+                      className="mt-1 font-mono text-xs"
+                      type="email"
+                      value={recipient}
+                      onChange={(e) => setRecipient(e.target.value)}
+                      placeholder="recipient@example.com"
+                      required
+                    />
+                  </div>
+                )}
 
                 {showCcBcc && (
                   <div className="grid gap-2 sm:grid-cols-2 pt-1">

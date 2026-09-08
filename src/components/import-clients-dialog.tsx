@@ -51,6 +51,7 @@ import {
   STATUS_LABELS,
   type DealStatus,
 } from "@/lib/crm";
+import { formatClientEmails, getInvalidEmails, parseClientEmails } from "@/lib/email-utils";
 
 type TargetFieldKey =
   | "name"
@@ -343,7 +344,11 @@ export function ImportClientsDialog({
       const phones = new Set<string>();
 
       for (const item of existing || []) {
-        if (item.email) emails.add(item.email.trim().toLowerCase());
+        if (item.email) {
+          for (const e of parseClientEmails(item.email)) {
+            emails.add(e.toLowerCase());
+          }
+        }
         if (item.phone) {
           const cleaned = item.phone.replace(/[^0-9+]/g, "");
           if (cleaned) phones.add(cleaned);
@@ -381,10 +386,14 @@ export function ImportClientsDialog({
       const rawDealValue = columnMapping.deal_value ? Number(row[columnMapping.deal_value]) : 0;
       const rawNotes = columnMapping.notes ? String(row[columnMapping.notes] || "").trim() : "";
 
+      const parsedEmails = parseClientEmails(rawEmail);
+      const invalidEmails = getInvalidEmails(rawEmail);
+      const formattedEmail = formatClientEmails(parsedEmails);
+
       const clientItem: ClientImportItem = {
         name: rawName,
         company: rawCompany || null,
-        email: rawEmail || null,
+        email: formattedEmail,
         phone: rawPhone || null,
         whatsapp: rawWhatsapp || null,
         website: rawWebsite || null,
@@ -407,27 +416,29 @@ export function ImportClientsDialog({
       }
 
       // 2. Validate email format if present
-      if (rawEmail && !EMAIL_REGEX.test(rawEmail)) {
+      if (rawEmail && invalidEmails.length > 0) {
         results.push({
           raw: row,
           client: clientItem,
           status: "invalid",
-          reason: `Invalid email format (${rawEmail})`,
+          reason: `Invalid email format (${invalidEmails.join(", ")})`,
         });
         continue;
       }
 
-      const emailLower = rawEmail ? rawEmail.toLowerCase() : null;
       const phoneClean = rawPhone ? rawPhone.replace(/[^0-9+]/g, "") : null;
 
-      // 3. Duplicate checks
+      // 3. Duplicate checks for all emails in client item
       let duplicateReason: string | undefined;
 
-      if (emailLower) {
-        if (existingClientsData.emails.has(emailLower)) {
-          duplicateReason = `Email already exists in CRM (${emailLower})`;
-        } else if (seenEmailsInFile.has(emailLower)) {
-          duplicateReason = `Duplicate email in spreadsheet (${emailLower})`;
+      for (const e of parsedEmails) {
+        const lower = e.toLowerCase();
+        if (existingClientsData.emails.has(lower)) {
+          duplicateReason = `Email already exists in CRM (${e})`;
+          break;
+        } else if (seenEmailsInFile.has(lower)) {
+          duplicateReason = `Duplicate email in spreadsheet (${e})`;
+          break;
         }
       }
 
@@ -450,7 +461,9 @@ export function ImportClientsDialog({
       }
 
       // Mark as seen in this file
-      if (emailLower) seenEmailsInFile.add(emailLower);
+      for (const e of parsedEmails) {
+        seenEmailsInFile.add(e.toLowerCase());
+      }
       if (phoneClean) seenPhonesInFile.add(phoneClean);
 
       results.push({

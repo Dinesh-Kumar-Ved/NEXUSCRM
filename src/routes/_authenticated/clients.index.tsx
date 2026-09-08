@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/select";
 import { useAuth, useProfile, useWorkspace } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
+import { getAdditionalEmails, getPrimaryEmail } from "@/lib/email-utils";
 import {
   CLIENT_SOURCES,
   STATUS_LABELS,
@@ -402,7 +403,14 @@ function ClientsPage() {
                   </p>
                 </div>
                 <p className="truncate text-sm">{client.company || "—"}</p>
-                <p className="truncate text-sm text-muted-foreground">{client.email || "—"}</p>
+                <div className="truncate text-sm">
+                  <span className="text-muted-foreground">{getPrimaryEmail(client.email) || "—"}</span>
+                  {getAdditionalEmails(client.email).length > 0 && (
+                    <span className="ml-1.5 inline-flex items-center rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                      +{getAdditionalEmails(client.email).length}
+                    </span>
+                  )}
+                </div>
                 <Badge variant="outline" className="w-fit">
                   {STATUS_LABELS[client.status]}
                 </Badge>

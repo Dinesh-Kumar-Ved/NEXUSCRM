@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { EmailConversations } from "@/components/clients/email-conversations";
 import { ClientDialog } from "@/components/client-dialog";
 import { SendMessageDialog } from "@/components/send-message-dialog";
+import { getAdditionalEmails, getPrimaryEmail } from "@/lib/email-utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -214,8 +215,12 @@ function ClientDetailsPage() {
   }
 
   const client = clientQuery.data;
+  const primaryEmail = getPrimaryEmail(client.email);
+  const additionalEmails = getAdditionalEmails(client.email);
+
   const details: Array<[string, string | null | undefined]> = [
-    ["Email", client.email],
+    ["Primary Email", primaryEmail || client.email],
+    ...(additionalEmails.length > 0 ? [["Additional Email(s)", additionalEmails.join(", ")] as [string, string]] : []),
     ["Phone", client.phone],
     ["WhatsApp", client.whatsapp],
     ["Website", client.website],

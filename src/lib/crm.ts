@@ -75,6 +75,8 @@ export interface ClientRecord {
   workspace_id: string;
 }
 
+import { getPrimaryEmail } from "./email-utils.ts";
+
 /** Replace {{tokens}} with client values for personalized messaging. */
 export function personalize(template: string | null | undefined, client: Partial<ClientRecord>): string {
   if (!template || typeof template !== "string") return "";
@@ -82,7 +84,7 @@ export function personalize(template: string | null | undefined, client: Partial
     client_name: client.name ?? "there",
     first_name: (client.name ?? "there").split(" ")[0] ?? "there",
     company: client.company ?? "your company",
-    email: client.email ?? "",
+    email: getPrimaryEmail(client.email) ?? "",
     phone: client.phone ?? "",
     status: client.status ? (STATUS_LABELS[client.status as DealStatus] || client.status) : "",
   };
