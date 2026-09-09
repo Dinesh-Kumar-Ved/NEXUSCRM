@@ -18,12 +18,24 @@ import {
   RefreshCw,
   Reply,
   Send,
+  Trash2,
   User,
   X,
 } from "lucide-react";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,6 +43,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  deleteAllClientEmailMessages,
+  deleteEmailMessage,
   getClientEmailThreads,
   getEmailAttachmentUrl,
   sendEmailThreadReply,
@@ -120,7 +134,9 @@ export function EmailConversations({ clientId, workspaceId, client }: EmailConve
   const queryClient = useQueryClient();
   const getThreadsFn = useServerFn(getClientEmailThreads);
   const syncGmailFn = useServerFn(triggerGmailSync);
+  const deleteAllFn = useServerFn(deleteAllClientEmailMessages);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
 
   const {
@@ -136,6 +152,42 @@ export function EmailConversations({ clientId, workspaceId, client }: EmailConve
     enabled: Boolean(workspaceId && clientId),
     refetchInterval: 30000, // Refresh every 30 seconds
   });
+
+  // Background Gmail auto-sync (periodically fetches new inbound emails without UI blocking)
+  useEffect(() => {
+    if (!workspaceId || !clientId) return;
+
+    let isMounted = true;
+    const runBackgroundSync = async () => {
+      try {
+        const res = await syncGmailFn({ data: { workspaceId } });
+        if (isMounted && res?.ok) {
+          setLastSyncedAt(new Date());
+          if (res.inserted > 0 || res.newMessages > 0) {
+            await queryClient.invalidateQueries({
+              queryKey: ["client-email-threads", workspaceId, clientId],
+            });
+            await queryClient.invalidateQueries({
+              queryKey: ["client-messages", clientId],
+            });
+          }
+        }
+      } catch {
+        // Background sync error is handled silently to avoid interrupting the user
+      }
+    };
+
+    void runBackgroundSync();
+
+    const intervalId = setInterval(() => {
+      void runBackgroundSync();
+    }, 30000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
+  }, [workspaceId, clientId, syncGmailFn, queryClient]);
 
   const handleSync = async () => {
     setIsSyncing(true);
@@ -166,6 +218,23 @@ export function EmailConversations({ clientId, workspaceId, client }: EmailConve
     }
   };
 
+  const handleDeleteAll = async () => {
+    setIsDeletingAll(true);
+    try {
+      const res = await deleteAllFn({ data: { workspaceId, clientId } });
+      if (res.success) {
+        toast.success(`Deleted ${res.count} email message${res.count === 1 ? "" : "s"}.`);
+        await queryClient.invalidateQueries({ queryKey: ["client-email-threads", workspaceId, clientId] });
+        await queryClient.invalidateQueries({ queryKey: ["client-messages", clientId] });
+        await queryClient.invalidateQueries({ queryKey: ["client-activities", clientId] });
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete email conversation history.");
+    } finally {
+      setIsDeletingAll(false);
+    }
+  };
+
   return (
     <Card className="border-border/60">
       <CardHeader className="flex flex-row items-center justify-between pb-4">
@@ -183,6 +252,38 @@ export function EmailConversations({ clientId, workspaceId, client }: EmailConve
             <span className="hidden sm:inline text-[11px] text-muted-foreground">
               Synced {lastSyncedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
+          )}
+          {threads && threads.length > 0 && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={isDeletingAll}
+                  className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+                >
+                  <Trash2 className="size-3.5" />
+                  {isDeletingAll ? "Deleting..." : "Delete All"}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Email Conversation History?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to delete all email conversations for {client.name}? This action removes email message records only and cannot be undone. The client record will remain untouched.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleDeleteAll}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  >
+                    Delete All
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           )}
           <Button
             variant="outline"
@@ -311,6 +412,7 @@ function ThreadCard({
               key={msg.id || `${msg.provider_message_id}-${index}`}
               message={msg}
               workspaceId={workspaceId}
+              clientId={clientId}
             />
           ))}
 
@@ -342,14 +444,19 @@ function ThreadCard({
 function MessageItem({
   message,
   workspaceId,
+  clientId,
 }: {
   message: EmailMessageRecord;
   workspaceId: string;
+  clientId?: string;
 }) {
+  const queryClient = useQueryClient();
+  const deleteMessageFn = useServerFn(deleteEmailMessage);
   const isInbound = message.direction === "inbound";
   const [showFullHtml, setShowFullHtml] = useState(false);
   const getAttachmentUrlFn = useServerFn(getEmailAttachmentUrl);
   const [downloadingFile, setDownloadingFile] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDownloadAttachment = async (att: StoredEmailAttachment) => {
     if (!att.storagePath) {
@@ -373,6 +480,24 @@ function MessageItem({
       toast.error(err instanceof Error ? err.message : "Failed to open attachment.");
     } finally {
       setDownloadingFile(null);
+    }
+  };
+
+  const handleDeleteMessage = async () => {
+    setIsDeleting(true);
+    try {
+      const res = await deleteMessageFn({ data: { workspaceId, messageId: message.id } });
+      if (res.success) {
+        toast.success("Email message deleted.");
+        if (clientId) {
+          await queryClient.invalidateQueries({ queryKey: ["client-email-threads", workspaceId, clientId] });
+          await queryClient.invalidateQueries({ queryKey: ["client-messages", clientId] });
+        }
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete email message.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -416,10 +541,47 @@ function MessageItem({
           </div>
         </div>
 
-        <span className="text-xs text-muted-foreground">
-          {formatDateTime(message.received_at || message.sent_at || message.created_at)}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">
+            {formatDateTime(message.received_at || message.sent_at || message.created_at)}
+          </span>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                title="Delete message"
+                disabled={isDeleting}
+              >
+                {isDeleting ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="size-3.5" />
+                )}
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Email Message?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete this email message? This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleDeleteMessage}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
       </div>
+
 
       {/* Message Body */}
       <div className="mt-2 text-xs leading-relaxed text-foreground">

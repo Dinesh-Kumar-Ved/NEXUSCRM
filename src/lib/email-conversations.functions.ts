@@ -126,7 +126,6 @@ export const getClientEmailThreads = createServerFn({ method: "GET" })
       .select("*")
       .eq("workspace_id", data.workspaceId)
       .eq("client_id", data.clientId)
-      .eq("direction", "inbound")
       .order("received_at", { ascending: true, nullsFirst: false });
 
     if (error) {
@@ -515,3 +514,62 @@ export const triggerGmailSync = createServerFn({ method: "POST" })
       myEmail: result.myEmail,
     };
   });
+
+/**
+ * Deletes a single email message record by ID.
+ */
+export const deleteEmailMessage = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((input: unknown) =>
+    z
+      .object({
+        workspaceId: z.string().uuid(),
+        messageId: z.string().uuid(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    await verifyWorkspaceMembership(context.supabase, data.workspaceId, context.userId);
+
+    const { error } = await (supabaseAdmin as unknown as any)
+      .from("email_messages")
+      .delete()
+      .eq("id", data.messageId)
+      .eq("workspace_id", data.workspaceId);
+
+    if (error) {
+      throw new Error(`Failed to delete email message: ${error.message}`);
+    }
+
+    return { success: true };
+  });
+
+/**
+ * Deletes all email conversation records for a client (never deletes the client).
+ */
+export const deleteAllClientEmailMessages = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .validator((input: unknown) =>
+    z
+      .object({
+        workspaceId: z.string().uuid(),
+        clientId: z.string().uuid(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    await verifyWorkspaceMembership(context.supabase, data.workspaceId, context.userId);
+
+    const { error, count } = await (supabaseAdmin as unknown as any)
+      .from("email_messages")
+      .delete({ count: "exact" })
+      .eq("client_id", data.clientId)
+      .eq("workspace_id", data.workspaceId);
+
+    if (error) {
+      throw new Error(`Failed to delete email history: ${error.message}`);
+    }
+
+    return { success: true, count: count ?? 0 };
+  });
+
