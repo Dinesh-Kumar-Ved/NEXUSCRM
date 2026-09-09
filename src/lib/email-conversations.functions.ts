@@ -126,6 +126,7 @@ export const getClientEmailThreads = createServerFn({ method: "GET" })
       .select("*")
       .eq("workspace_id", data.workspaceId)
       .eq("client_id", data.clientId)
+      .eq("direction", "inbound")
       .order("received_at", { ascending: true, nullsFirst: false });
 
     if (error) {
