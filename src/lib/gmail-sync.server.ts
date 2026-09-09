@@ -260,13 +260,18 @@ async function storeMessage(
   // Check if message already exists
   const { data: existing } = await (supabase as unknown as any)
     .from("email_messages")
-    .select("id, client_id")
+    .select("id, client_id, rfc_message_id")
     .eq("workspace_id", workspaceId)
     .eq("provider_message_id", msg.id)
     .maybeSingle();
 
   if (existing) {
-    if (!existing.client_id && clientId) {
+    if (
+      !existing.client_id &&
+      clientId &&
+      existing.rfc_message_id !== "DELETED" &&
+      existing.rfc_message_id !== "DELETE_ALL_MARKER"
+    ) {
       const { error: updateErr } = await (supabase as unknown as any)
         .from("email_messages")
         .update({ client_id: clientId })
@@ -360,6 +365,24 @@ export async function syncGmailForWorkspace(workspaceId: string): Promise<GmailS
 
   console.log(`[GMAIL_DEBUG_CLIENT]\nworkspaceId=${workspaceId}\nclientCount=${clients?.length ?? 0}\nclientEmails=${JSON.stringify(Object.keys(emailToClient))}`);
   console.log(`[GMAIL_SYNC] Loaded ${clients?.length ?? 0} client email(s) for matching`);
+
+  // Preload Delete All tombstone cutoffs per client
+  const { data: tombstoneRows } = await (supabase as unknown as any)
+    .from("email_messages")
+    .select("body_text, received_at")
+    .eq("workspace_id", workspaceId)
+    .eq("rfc_message_id", "DELETE_ALL_MARKER");
+
+  const clientDeleteAllCutoff: Record<string, number> = {};
+  tombstoneRows?.forEach((row: { body_text: string | null; received_at: string | null }) => {
+    if (row.body_text && row.received_at) {
+      const timeMs = new Date(row.received_at).getTime();
+      const existingMs = clientDeleteAllCutoff[row.body_text] || 0;
+      if (timeMs > existingMs) {
+        clientDeleteAllCutoff[row.body_text] = timeMs;
+      }
+    }
+  });
 
   // Preload existing thread-to-client associations from email_messages
   const { data: threadRows } = await (supabase as unknown as any)
@@ -471,6 +494,17 @@ export async function syncGmailForWorkspace(workspaceId: string): Promise<GmailS
         console.log(`[GMAIL_DEBUG_SKIP]\nmsgId=${msg.id}\nthreadId=${msg.threadId}\nfromEmail=${fromEmail}\ntoEmail=${toEmail}\nreason=fromEmail does not match any known client email`);
         unmatchedCount++;
         continue;
+      }
+
+      // Check if client has a Delete All cutoff timestamp
+      const cutoffMs = clientDeleteAllCutoff[matchedClientId];
+      if (cutoffMs) {
+        const msgInternalTime = parseInt(msg.internalDate, 10);
+        if (!isNaN(msgInternalTime) && msgInternalTime <= cutoffMs) {
+          console.log(`[GMAIL_SYNC] msgId=${msg.id} internalDate=${new Date(msgInternalTime).toISOString()} <= Delete All cutoff=${new Date(cutoffMs).toISOString()} for client=${matchedClientId}. Skipping re-import.`);
+          unmatchedCount++;
+          continue;
+        }
       }
 
       // Log insert attempt

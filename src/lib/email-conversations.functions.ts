@@ -407,6 +407,8 @@ export const getUnmatchedEmails = createServerFn({ method: "GET" })
       .eq("workspace_id", data.workspaceId)
       .is("client_id", null)
       .eq("direction", "inbound")
+      .neq("rfc_message_id", "DELETED")
+      .neq("rfc_message_id", "DELETE_ALL_MARKER")
       .order("received_at", { ascending: false });
 
     if (error) {
@@ -518,6 +520,7 @@ export const triggerGmailSync = createServerFn({ method: "POST" })
 
 /**
  * Deletes a single email message record by ID.
+ * Soft-deletes the record in email_messages so future Gmail syncs preserve the deletion.
  */
 export const deleteEmailMessage = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -534,7 +537,10 @@ export const deleteEmailMessage = createServerFn({ method: "POST" })
 
     const { error } = await (supabaseAdmin as unknown as any)
       .from("email_messages")
-      .delete()
+      .update({
+        client_id: null,
+        rfc_message_id: "DELETED",
+      })
       .eq("id", data.messageId)
       .eq("workspace_id", data.workspaceId);
 
@@ -547,6 +553,8 @@ export const deleteEmailMessage = createServerFn({ method: "POST" })
 
 /**
  * Deletes all email conversation records for a client (never deletes the client).
+ * Soft-deletes existing messages and inserts a Delete All tombstone marker cutoff timestamp
+ * so future Gmail syncs do not re-import past emails.
  */
 export const deleteAllClientEmailMessages = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -561,16 +569,47 @@ export const deleteAllClientEmailMessages = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     await verifyWorkspaceMembership(context.supabase, data.workspaceId, context.userId);
 
-    const { error, count } = await (supabaseAdmin as unknown as any)
+    // 1. Soft-delete all existing email_messages for this client
+    const { error: updateErr, count } = await (supabaseAdmin as unknown as any)
       .from("email_messages")
-      .delete({ count: "exact" })
+      .update({
+        client_id: null,
+        rfc_message_id: "DELETED",
+      })
       .eq("client_id", data.clientId)
       .eq("workspace_id", data.workspaceId);
 
-    if (error) {
-      throw new Error(`Failed to delete email history: ${error.message}`);
+    if (updateErr) {
+      throw new Error(`Failed to delete email history: ${updateErr.message}`);
     }
+
+    // 2. Fetch client email for reference
+    const { data: client } = await context.supabase
+      .from("clients")
+      .select("email")
+      .eq("id", data.clientId)
+      .eq("workspace_id", data.workspaceId)
+      .maybeSingle();
+
+    const clientEmail = client?.email?.trim() || "";
+    const nowIso = new Date().toISOString();
+
+    // 3. Upsert tombstone marker for Delete All cutoff timestamp
+    await (supabaseAdmin as unknown as any).from("email_messages").insert({
+      workspace_id: data.workspaceId,
+      client_id: null,
+      thread_id: `tombstone_${data.clientId}`,
+      provider_message_id: `tombstone_${data.clientId}_${Date.now()}`,
+      rfc_message_id: "DELETE_ALL_MARKER",
+      direction: "inbound",
+      from_email: clientEmail,
+      to_email: "",
+      subject: "[DELETE_ALL_MARKER]",
+      body_text: data.clientId,
+      received_at: nowIso,
+    });
 
     return { success: true, count: count ?? 0 };
   });
+
 
