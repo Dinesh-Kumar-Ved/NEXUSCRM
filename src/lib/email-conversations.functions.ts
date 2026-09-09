@@ -8,6 +8,7 @@ import {
   getAttachmentDownloadSignedUrl,
   syncGmailForWorkspace,
 } from "./gmail-sync.server";
+import { syncImapForWorkspace } from "./imap-sync.server";
 import { fetchGmailProfile, sendGmailMessage } from "./google-auth.server";
 
 const BLOCKED_EXTENSIONS = new Set([
@@ -486,8 +487,11 @@ export const assignEmailToClient = createServerFn({ method: "POST" })
   });
 
 /**
- * Triggers a live Gmail sync for the workspace.
- * Returns detailed counts for display in the UI and debugging.
+ * Triggers a live email sync for the workspace.
+ * Runs Gmail sync (if Gmail integration configured) then IMAP sync (if SMTP/Hostinger
+ * integration configured). Both are isolated in their own try/catch so one failing
+ * never blocks the other.
+ * Returns combined counts for display in the UI and debugging.
  */
 export const triggerGmailSync = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -500,21 +504,64 @@ export const triggerGmailSync = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     await verifyWorkspaceMembership(context.supabase, data.workspaceId, context.userId);
-    const result = await syncGmailForWorkspace(data.workspaceId);
+
+    // Aggregate counters across all providers
+    let totalFound = 0;
+    let totalProcessed = 0;
+    let totalInserted = 0;
+    let totalMatched = 0;
+    let totalUnmatched = 0;
+    let totalErrors = 0;
+    let primaryEmail = "";
+
+    // ── Gmail sync (unchanged) ──────────────────────────────────────────
+    try {
+      const gmailResult = await syncGmailForWorkspace(data.workspaceId);
+      totalFound     += gmailResult.found;
+      totalProcessed += gmailResult.processed;
+      totalInserted  += gmailResult.inserted;
+      totalMatched   += gmailResult.matched;
+      totalUnmatched += gmailResult.unmatched;
+      totalErrors    += gmailResult.errors;
+      primaryEmail    = gmailResult.myEmail;
+      console.log(`[SYNC] Gmail sync done: inserted=${gmailResult.inserted}`);
+    } catch (gmailErr) {
+      // Gmail not configured or token expired — skip silently
+      const msg = gmailErr instanceof Error ? gmailErr.message : String(gmailErr);
+      console.log(`[SYNC] Gmail sync skipped or failed: ${msg}`);
+    }
+
+    // ── IMAP sync (Hostinger / SMTP workspaces) ─────────────────────────
+    try {
+      const imapResult = await syncImapForWorkspace(data.workspaceId);
+      totalFound     += imapResult.found;
+      totalProcessed += imapResult.processed;
+      totalInserted  += imapResult.inserted;
+      totalMatched   += imapResult.matched;
+      totalUnmatched += imapResult.unmatched;
+      totalErrors    += imapResult.errors;
+      if (!primaryEmail && imapResult.account) primaryEmail = imapResult.account;
+      console.log(`[SYNC] IMAP sync done: inserted=${imapResult.inserted}`);
+    } catch (imapErr) {
+      // IMAP not configured or connection failed — skip silently
+      const msg = imapErr instanceof Error ? imapErr.message : String(imapErr);
+      console.log(`[SYNC] IMAP sync skipped or failed: ${msg}`);
+    }
+
     return {
       ok: true,
       // Legacy fields kept for backward compat
-      synced: result.inserted,
-      newMessages: result.inserted,
-      total: result.found,
-      // Detailed counts
-      found: result.found,
-      processed: result.processed,
-      inserted: result.inserted,
-      matched: result.matched,
-      unmatched: result.unmatched,
-      errors: result.errors,
-      myEmail: result.myEmail,
+      synced: totalInserted,
+      newMessages: totalInserted,
+      total: totalFound,
+      // Detailed combined counts
+      found: totalFound,
+      processed: totalProcessed,
+      inserted: totalInserted,
+      matched: totalMatched,
+      unmatched: totalUnmatched,
+      errors: totalErrors,
+      myEmail: primaryEmail,
     };
   });
 
