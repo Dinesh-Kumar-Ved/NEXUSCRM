@@ -103,8 +103,15 @@ export function SendMessageDialog({
   const additionalEmails = useMemo(() => getAdditionalEmails(client.email), [client.email]);
 
   const [channel, setChannel] = useState<Exclude<Channel, "call">>(defaultChannel);
-  const [targetEmailOption, setTargetEmailOption] = useState<string>("primary");
-  const [recipient, setRecipient] = useState(primaryEmail || client.email || "");
+  const initialOption = defaultChannel === "email" && clientEmails.length > 1 ? "all" : "primary";
+  const [targetEmailOption, setTargetEmailOption] = useState<string>(initialOption);
+  const [recipient, setRecipient] = useState(
+    defaultChannel === "email"
+      ? initialOption === "all"
+        ? clientEmails.join(", ")
+        : primaryEmail || client.email || ""
+      : primaryEmail || client.email || "",
+  );
   const [showCcBcc, setShowCcBcc] = useState(false);
   const [ccInput, setCcInput] = useState("");
   const [bccInput, setBccInput] = useState("");
@@ -162,10 +169,14 @@ export function SendMessageDialog({
   useEffect(() => {
     if (open) {
       setChannel(defaultChannel);
-      setTargetEmailOption("primary");
+      const isMulti = clientEmails.length > 1;
+      const option = defaultChannel === "email" && isMulti ? "all" : "primary";
+      setTargetEmailOption(option);
       setRecipient(
         defaultChannel === "email"
-          ? primaryEmail || client.email || ""
+          ? option === "all"
+            ? clientEmails.join(", ")
+            : primaryEmail || client.email || ""
           : defaultChannel === "whatsapp"
             ? client.whatsapp || client.phone || ""
             : client.phone || "",
@@ -184,14 +195,17 @@ export function SendMessageDialog({
       setSelectedTemplateId(undefined);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
-  }, [open, client, defaultChannel, primaryEmail]);
+  }, [open, client, defaultChannel, primaryEmail, clientEmails]);
 
   // Adjust default recipient whenever channel changes
   const handleChannelChange = (newChannel: Exclude<Channel, "call">) => {
     setChannel(newChannel);
     setSelectedTemplateId(undefined);
     if (newChannel === "email") {
-      setRecipient(client.email || "");
+      const isMulti = clientEmails.length > 1;
+      const option = isMulti ? "all" : "primary";
+      setTargetEmailOption(option);
+      setRecipient(option === "all" ? clientEmails.join(", ") : primaryEmail || client.email || "");
     } else if (newChannel === "whatsapp") {
       setRecipient(client.whatsapp || client.phone || "");
     } else {
@@ -321,7 +335,13 @@ export function SendMessageDialog({
 
       if (result.ok) {
         const count = result.successCount ?? 1;
-        toast.success(`Message dispatched successfully to ${count} email address${count > 1 ? "es" : ""}`);
+        if (result.failCount && result.failCount > 0) {
+          toast.warning(
+            `Message dispatched to ${count} email address${count > 1 ? "es" : ""}, but ${result.failCount} address${result.failCount > 1 ? "es" : ""} failed.`,
+          );
+        } else {
+          toast.success(`Message dispatched successfully to ${count} email address${count > 1 ? "es" : ""}`);
+        }
         if (onSent) onSent();
         onOpenChange(false);
       } else {

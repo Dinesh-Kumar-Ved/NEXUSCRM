@@ -290,115 +290,138 @@ export async function deliverToClient(
       `[DIRECT_DISPATCH] Client: ${client.id} | Channel: ${args.channel} | To: ${to} | Subject: "${subject || "Message from your account team"}" | Attachments: ${args.attachments?.length ?? 0}`,
     );
 
-    const result = await deliver(
-      args.supabase,
-      client.workspace_id,
-      args.channel,
-      to,
-      subject || "Message from your account team",
-      body,
-      {
-        cc: args.cc,
-        bcc: args.bcc,
-        html: args.html ? personalize(args.html, client) : undefined,
-        attachments: args.attachments,
-        threadId: args.threadId,
-        inReplyTo: args.inReplyTo,
-        references: args.references,
-      },
-    );
+    try {
+      const result = await deliver(
+        args.supabase,
+        client.workspace_id,
+        args.channel,
+        to,
+        subject || "Message from your account team",
+        body,
+        {
+          cc: args.cc,
+          bcc: args.bcc,
+          html: args.html ? personalize(args.html, client) : undefined,
+          attachments: args.attachments,
+          threadId: args.threadId,
+          inReplyTo: args.inReplyTo,
+          references: args.references,
+        },
+      );
 
-    await recordMessage({
-      supabase: args.supabase,
-      userId: args.userId,
-      clientId: client.id,
-      channel: args.channel,
-      subject: args.channel === "email" ? subject : null,
-      body,
-      to,
-      result,
-    });
+      await recordMessage({
+        supabase: args.supabase,
+        userId: args.userId,
+        clientId: client.id,
+        channel: args.channel,
+        subject: args.channel === "email" ? subject : null,
+        body,
+        to,
+        result,
+      });
 
-    if (args.channel === "email" && result.ok && client.workspace_id) {
-      const now = new Date();
-      const messageId = result.providerMessageId ?? `outbound_${Date.now()}`;
-      const threadId = (result as any).threadId ?? messageId;
+      if (args.channel === "email" && result.ok && client.workspace_id) {
+        const now = new Date();
+        const messageId = result.providerMessageId ?? `outbound_${Date.now()}`;
+        const threadId = (result as any).threadId ?? messageId;
 
-      const processedAttachments: Array<{
-        filename: string;
-        mimeType: string;
-        size: number;
-        storagePath?: string;
-      }> = [];
+        const processedAttachments: Array<{
+          filename: string;
+          mimeType: string;
+          size: number;
+          storagePath?: string;
+        }> = [];
 
-      if (args.attachments && args.attachments.length > 0) {
-        for (const att of args.attachments) {
-          const cleanLen = att.contentBase64.replace(/\s+/g, "").replace(/=+$/, "").length;
-          const sizeBytes = Math.floor((cleanLen * 3) / 4);
-          const safeName = att.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
-          const storagePath = `${client.workspace_id}/${messageId}/${safeName}`;
+        if (args.attachments && args.attachments.length > 0) {
+          for (const att of args.attachments) {
+            const cleanLen = att.contentBase64.replace(/\s+/g, "").replace(/=+$/, "").length;
+            const sizeBytes = Math.floor((cleanLen * 3) / 4);
+            const safeName = att.filename.replace(/[^a-zA-Z0-9._-]/g, "_");
+            const storagePath = `${client.workspace_id}/${messageId}/${safeName}`;
 
-          try {
-            const buffer = Buffer.from(att.contentBase64, "base64");
-            await supabaseAdmin.storage
-              .from("email-attachments")
-              .upload(storagePath, buffer, {
-                contentType: att.mimeType,
-                upsert: true,
+            try {
+              const buffer = Buffer.from(att.contentBase64, "base64");
+              await supabaseAdmin.storage
+                .from("email-attachments")
+                .upload(storagePath, buffer, {
+                  contentType: att.mimeType,
+                  upsert: true,
+                });
+
+              processedAttachments.push({
+                filename: att.filename,
+                mimeType: att.mimeType,
+                size: sizeBytes,
+                storagePath,
               });
-
-            processedAttachments.push({
-              filename: att.filename,
-              mimeType: att.mimeType,
-              size: sizeBytes,
-              storagePath,
-            });
-          } catch (attErr) {
-            console.warn("Could not upload attachment to storage:", attErr);
-            processedAttachments.push({
-              filename: att.filename,
-              mimeType: att.mimeType,
-              size: sizeBytes,
-            });
+            } catch (attErr) {
+              console.warn("Could not upload attachment to storage:", attErr);
+              processedAttachments.push({
+                filename: att.filename,
+                mimeType: att.mimeType,
+                size: sizeBytes,
+              });
+            }
           }
+        }
+
+        try {
+          await (supabaseAdmin as unknown as any)
+            .from("email_messages")
+            .insert({
+              workspace_id: client.workspace_id,
+              client_id: client.id,
+              thread_id: threadId,
+              provider_message_id: messageId,
+              rfc_message_id: "",
+              direction: "outbound",
+              from_email: "me",
+              from_name: "You",
+              to_email: to,
+              cc: args.cc ? args.cc.join(", ") : null,
+              bcc: args.bcc ? args.bcc.join(", ") : null,
+              subject: subject || "(No Subject)",
+              body_text: body,
+              body_html: args.html ? personalize(args.html, client) : `<p>${body.replace(/\n/g, "<br/>")}</p>`,
+              attachments: processedAttachments,
+              in_reply_to: args.inReplyTo ?? null,
+              references: args.references ?? null,
+              sent_at: now,
+              received_at: now,
+            });
+        } catch (insertErr) {
+          console.error("[MESSAGING_DISPATCH] Failed to record outbound email in email_messages:", insertErr);
         }
       }
 
-      try {
-        await (supabaseAdmin as unknown as any)
-          .from("email_messages")
-          .insert({
-            workspace_id: client.workspace_id,
-            client_id: client.id,
-            thread_id: threadId,
-            provider_message_id: messageId,
-            rfc_message_id: "",
-            direction: "outbound",
-            from_email: "me",
-            from_name: "You",
-            to_email: to,
-            cc: args.cc ? args.cc.join(", ") : null,
-            bcc: args.bcc ? args.bcc.join(", ") : null,
-            subject: subject || "(No Subject)",
-            body_text: body,
-            body_html: args.html ? personalize(args.html, client) : `<p>${body.replace(/\n/g, "<br/>")}</p>`,
-            attachments: processedAttachments,
-            in_reply_to: args.inReplyTo ?? null,
-            references: args.references ?? null,
-            sent_at: now,
-            received_at: now,
-          });
-      } catch (insertErr) {
-        console.error("[MESSAGING_DISPATCH] Failed to record outbound email in email_messages:", insertErr);
+      lastResult = result;
+      if (result.ok) {
+        successCount++;
+      } else {
+        failCount++;
+        if (result.error) errors.push(result.error);
       }
-    }
-
-    lastResult = result;
-    if (result.ok) {
-      successCount++;
-    } else {
+    } catch (err) {
       failCount++;
-      if (result.error) errors.push(result.error);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      errors.push(`Error sending to ${to}: ${errMsg}`);
+      const failedResult: SendResult = {
+        ok: false,
+        status: "failed",
+        provider: "none",
+        error: errMsg,
+      };
+      await recordMessage({
+        supabase: args.supabase,
+        userId: args.userId,
+        clientId: client.id,
+        channel: args.channel,
+        subject: args.channel === "email" ? subject : null,
+        body,
+        to,
+        result: failedResult,
+      });
+      lastResult = failedResult;
     }
   }
 
