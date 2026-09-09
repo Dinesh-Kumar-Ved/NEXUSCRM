@@ -7,6 +7,7 @@ import {
   sendGmailMessage as dispatchGmailMessage,
   type EmailAttachment,
 } from "./google-auth.server";
+import { appendToImapSentFolder } from "./imap-sync.server";
 
 export interface WhatsAppConfig {
   phoneNumberId: string;
@@ -522,7 +523,8 @@ export async function sendEmailWithConfig(params: {
         auth: { user, pass },
       });
 
-      const info = await transporter.sendMail({
+      // Build the mail options object once so we can reuse it for APPEND
+      const mailOptions = {
         from: fromFormatted,
         to,
         cc: cc && cc.length > 0 ? cc : undefined,
@@ -538,9 +540,37 @@ export async function sendEmailWithConfig(params: {
                 contentType: a.mimeType,
               }))
             : undefined,
-      });
+      };
 
-      return { ok: true, messageId: info.messageId || undefined };
+      const info = await transporter.sendMail(mailOptions);
+      const sendResult = { ok: true as const, messageId: info.messageId || undefined };
+
+      // ── Fire-and-forget: save copy to IMAP Sent folder ─────────────────
+      // Only for SMTP workspaces. Never blocks or fails the send result.
+      if (config.workspaceId) {
+        const wid = config.workspaceId;
+        // Build raw RFC 2822 bytes using nodemailer's internal MailComposer.
+        // Must import from the sub-path since it is not on the top-level export.
+        try {
+          const MailComposer = (await import("nodemailer/lib/mail-composer")).default;
+          const composer = new MailComposer(mailOptions);
+          const rawMessage: Buffer = await new Promise((resolve, reject) => {
+            composer.compile().build((err: Error | null, buf: Buffer) => {
+              if (err) reject(err); else resolve(buf);
+            });
+          });
+          // appendToImapSentFolder never throws — failure is only logged
+          appendToImapSentFolder(wid, rawMessage).catch(() => {});
+        } catch (composeErr) {
+          // Composition failure must not affect the send result
+          console.error(
+            `[IMAP_APPEND] Could not build raw message for Sent folder: ${composeErr instanceof Error ? composeErr.message : composeErr}`,
+          );
+        }
+      }
+
+
+      return sendResult;
     } catch (err) {
       return {
         ok: false,

@@ -672,3 +672,134 @@ export async function syncImapForWorkspace(workspaceId: string): Promise<ImapSyn
     return result;
   }
 }
+
+// ---------------------------------------------------------------------------
+// IMAP APPEND: save a copy of a sent email to the Sent folder
+// ---------------------------------------------------------------------------
+
+/**
+ * Ordered list of common Sent folder names tried as fallback when SPECIAL-USE
+ * is not available on the server.
+ */
+const SENT_FOLDER_CANDIDATES = [
+  "Sent",
+  "Sent Items",
+  "Sent Messages",
+  "INBOX.Sent",
+  "[Gmail]/Sent Mail",
+];
+
+/**
+ * Finds the Sent folder on the IMAP server.
+ * Priority: SPECIAL-USE \Sent attribute → common name match (status probe).
+ * Returns the mailbox path string, or null if not found.
+ */
+async function detectSentFolder(client: ImapFlow): Promise<string | null> {
+  // client.list() returns all mailboxes with flags and specialUse properties
+  try {
+    const mailboxes = await client.list();
+    for (const mailbox of mailboxes) {
+      const flags: Set<string> = (mailbox as any).flags ?? new Set<string>();
+      if (
+        (mailbox as any).specialUse === "\\Sent" ||
+        flags.has("\\Sent")
+      ) {
+        console.log(`[IMAP_APPEND] Found Sent folder via SPECIAL-USE: "${mailbox.path}"`);
+        return mailbox.path;
+      }
+    }
+  } catch (listErr) {
+    console.log(
+      `[IMAP_APPEND] list() probe failed, falling back to name candidates: ${listErr instanceof Error ? listErr.message : listErr}`,
+    );
+  }
+
+  // Fallback: probe common names with STATUS
+  for (const candidate of SENT_FOLDER_CANDIDATES) {
+    try {
+      const status = await client.status(candidate, { messages: true });
+      if (status) {
+        console.log(`[IMAP_APPEND] Found Sent folder via candidate name: "${candidate}"`);
+        return candidate;
+      }
+    } catch {
+      // folder doesn't exist — try next
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Appends a copy of a successfully sent email into the IMAP Sent folder.
+ *
+ * SAFETY CONTRACT:
+ * - This function NEVER throws. All errors are caught and logged internally.
+ * - Call it fire-and-forget AFTER a successful SMTP send.
+ * - A failure here MUST NOT affect the send result returned to the caller.
+ * - Credentials are never written to any log statement.
+ * - Only applies to SMTP workspaces; Gmail workspaces are completely untouched.
+ *
+ * @param workspaceId  Workspace whose SMTP/IMAP credentials to use.
+ * @param rawMessage   Exact RFC 2822 message bytes to APPEND (same content as was sent).
+ */
+export async function appendToImapSentFolder(
+  workspaceId: string,
+  rawMessage: Buffer,
+): Promise<void> {
+  let client: ImapFlow | null = null;
+  let password = ""; // held only to scrub from error messages
+
+  try {
+    const creds = await getImapCredentials(workspaceId);
+    if (!creds) {
+      // Not an SMTP workspace — nothing to do
+      return;
+    }
+
+    password = creds.password; // for scrubbing only — never logged
+
+    client = new ImapFlow({
+      host: creds.host,
+      port: creds.port,
+      secure: true,
+      auth: {
+        user: creds.user,
+        pass: creds.password, // never referenced in any log statement
+      },
+      logger: false, // suppress imapflow internal logs (may contain auth context)
+      tls: { rejectUnauthorized: true },
+    });
+
+    await client.connect();
+    console.log(
+      `[IMAP_APPEND] Connected to ${creds.host}:${creds.port} workspace=${workspaceId}`,
+    );
+
+    const sentFolder = await detectSentFolder(client);
+    if (!sentFolder) {
+      console.warn(
+        `[IMAP_APPEND] No Sent folder found for workspace=${workspaceId} — APPEND skipped.`,
+      );
+      await client.logout();
+      return;
+    }
+
+    // APPEND with \Seen flag (standard practice for Sent folder copies)
+    await client.append(sentFolder, rawMessage, ["\\Seen"], new Date());
+
+    console.log(
+      `[IMAP_APPEND] Saved sent copy to folder="${sentFolder}" workspace=${workspaceId}`,
+    );
+    await client.logout();
+
+  } catch (err) {
+    const rawMsg = err instanceof Error ? err.message : String(err);
+    const safeMsg = password ? rawMsg.replace(password, "[REDACTED]") : rawMsg;
+    console.error(
+      `[IMAP_APPEND] Failed to save sent copy for workspace=${workspaceId}: ${safeMsg}`,
+    );
+    try { if (client) await client.logout(); } catch { /* ignore */ }
+    // DO NOT re-throw — must never affect the original send result
+  }
+}
