@@ -515,100 +515,218 @@ export async function runCampaign(
   const source = args.templateId ? "template" : "custom";
 
   for (const client of clients) {
-    const rawTo = recipientFor(client, args.channel);
-    const to = rawTo?.trim();
-
-    if (!to) {
-      skipped.push(`${client.name} (no ${args.channel} address)`);
-      failed += 1;
-      await recordMessage({
-        supabase: args.supabase,
-        userId: args.userId,
-        clientId: client.id,
-        campaignId: campaign.id,
-        channel: args.channel,
-        subject: args.channel === "email" ? (args.subject ?? null) : null,
-        body: args.body,
-        to: "N/A",
-        result: {
-          ok: false,
-          status: "failed",
-          provider: "none",
-          error: `Client has no ${args.channel} contact address.`,
-        },
-      });
-      continue;
-    }
-
     if (optedOut(client, args.channel)) {
       skipped.push(`${client.name} (opted out)`);
       continue;
     }
 
-    if (args.channel === "email" && (!to.includes("@") || !to.includes("."))) {
-      skipped.push(`${client.name} (invalid email: ${to})`);
-      failed += 1;
-      await recordMessage({
-        supabase: args.supabase,
-        userId: args.userId,
-        clientId: client.id,
-        campaignId: campaign.id,
-        channel: args.channel,
-        subject: args.channel === "email" ? (args.subject ?? null) : null,
-        body: args.body,
-        to,
-        result: {
-          ok: false,
-          status: "failed",
-          provider: "none",
-          error: `Invalid recipient email address: "${to}"`,
-        },
-      });
-      continue;
-    }
+    if (args.channel === "email") {
+      const clientEmails = parseClientEmails(client.email);
+      if (clientEmails.length === 0) {
+        skipped.push(`${client.name} (no email address)`);
+        failed += 1;
+        await recordMessage({
+          supabase: args.supabase,
+          userId: args.userId,
+          clientId: client.id,
+          campaignId: campaign.id,
+          channel: args.channel,
+          subject: args.subject ?? null,
+          body: args.body,
+          to: "N/A",
+          result: {
+            ok: false,
+            status: "failed",
+            provider: "none",
+            error: "Client has no email contact address.",
+          },
+        });
+        continue;
+      }
 
-    const body = personalize(args.body, client);
-    const subject = personalize(args.subject ?? "", client);
+      // Case-insensitive deduplication of client emails
+      const seenLower = new Set<string>();
+      const uniqueEmails: string[] = [];
+      for (const email of clientEmails) {
+        const trimmed = email.trim();
+        const lower = trimmed.toLowerCase();
+        if (!seenLower.has(lower)) {
+          seenLower.add(lower);
+          uniqueEmails.push(trimmed);
+        }
+      }
 
-    console.log(
-      `[BROADCAST_DISPATCH] Starting send | source=${source} | Campaign: ${campaign.id} | Client: ${client.id} | Recipient: ${to} | Subject: "${subject || "Update from your account team"}" | messageLength=${body.length} | attachments=${args.attachments?.length ?? 0}`,
-    );
+      for (const to of uniqueEmails) {
+        if (!to.includes("@") || !to.includes(".")) {
+          skipped.push(`${client.name} (invalid email: ${to})`);
+          failed += 1;
+          await recordMessage({
+            supabase: args.supabase,
+            userId: args.userId,
+            clientId: client.id,
+            campaignId: campaign.id,
+            channel: args.channel,
+            subject: args.subject ?? null,
+            body: args.body,
+            to,
+            result: {
+              ok: false,
+              status: "failed",
+              provider: "none",
+              error: `Invalid recipient email address: "${to}"`,
+            },
+          });
+          continue;
+        }
 
-    const result = await deliver(
-      args.supabase,
-      client.workspace_id,
-      args.channel,
-      to,
-      subject || "Update from your account team",
-      body,
-      {
-        attachments: args.attachments,
-      },
-    );
+        const body = personalize(args.body, client);
+        const subject = personalize(args.subject ?? "", client);
 
-    if (result.ok) {
-      sent += 1;
-      console.log(
-        `[BROADCAST_DISPATCH] Delivered | source=${source} | Campaign: ${campaign.id} | Client: ${client.id} | Recipient: ${to} | Provider: ${result.provider} | provider_message_id=${result.providerMessageId || "N/A"}`,
-      );
+        console.log(
+          `[BROADCAST_DISPATCH] Starting send | source=${source} | Campaign: ${campaign.id} | Client: ${client.id} | Recipient: ${to} | Subject: "${subject || "Update from your account team"}" | messageLength=${body.length} | attachments=${args.attachments?.length ?? 0}`,
+        );
+
+        try {
+          const result = await deliver(
+            args.supabase,
+            client.workspace_id,
+            args.channel,
+            to,
+            subject || "Update from your account team",
+            body,
+            {
+              attachments: args.attachments,
+            },
+          );
+
+          if (result.ok) {
+            sent += 1;
+            console.log(
+              `[BROADCAST_DISPATCH] Delivered | source=${source} | Campaign: ${campaign.id} | Client: ${client.id} | Recipient: ${to} | Provider: ${result.provider} | provider_message_id=${result.providerMessageId || "N/A"}`,
+            );
+          } else {
+            failed += 1;
+            console.error(
+              `[BROADCAST_DISPATCH] Failed | source=${source} | Campaign: ${campaign.id} | Client: ${client.id} | Recipient: ${to} | Error: ${result.error}`,
+            );
+          }
+
+          await recordMessage({
+            supabase: args.supabase,
+            userId: args.userId,
+            clientId: client.id,
+            campaignId: campaign.id,
+            channel: args.channel,
+            subject: subject || null,
+            body,
+            to,
+            result,
+          });
+        } catch (err) {
+          failed += 1;
+          const errMsg = err instanceof Error ? err.message : String(err);
+          console.error(
+            `[BROADCAST_DISPATCH] Exception sending to ${to} for client ${client.id}: ${errMsg}`,
+          );
+          await recordMessage({
+            supabase: args.supabase,
+            userId: args.userId,
+            clientId: client.id,
+            campaignId: campaign.id,
+            channel: args.channel,
+            subject: subject || null,
+            body,
+            to,
+            result: {
+              ok: false,
+              status: "failed",
+              provider: "none",
+              error: errMsg,
+            },
+          });
+        }
+      }
     } else {
-      failed += 1;
-      console.error(
-        `[BROADCAST_DISPATCH] Failed | source=${source} | Campaign: ${campaign.id} | Client: ${client.id} | Recipient: ${to} | Error: ${result.error}`,
-      );
-    }
+      const rawTo = recipientFor(client, args.channel);
+      const to = rawTo?.trim();
 
-    await recordMessage({
-      supabase: args.supabase,
-      userId: args.userId,
-      clientId: client.id,
-      campaignId: campaign.id,
-      channel: args.channel,
-      subject: args.channel === "email" ? subject : null,
-      body,
-      to,
-      result,
-    });
+      if (!to) {
+        skipped.push(`${client.name} (no ${args.channel} address)`);
+        failed += 1;
+        await recordMessage({
+          supabase: args.supabase,
+          userId: args.userId,
+          clientId: client.id,
+          campaignId: campaign.id,
+          channel: args.channel,
+          subject: null,
+          body: args.body,
+          to: "N/A",
+          result: {
+            ok: false,
+            status: "failed",
+            provider: "none",
+            error: `Client has no ${args.channel} contact address.`,
+          },
+        });
+        continue;
+      }
+
+      if (optedOut(client, args.channel)) {
+        skipped.push(`${client.name} (opted out)`);
+        continue;
+      }
+
+      const body = personalize(args.body, client);
+
+      try {
+        const result = await deliver(
+          args.supabase,
+          client.workspace_id,
+          args.channel,
+          to,
+          "",
+          body,
+        );
+
+        if (result.ok) {
+          sent += 1;
+        } else {
+          failed += 1;
+        }
+
+        await recordMessage({
+          supabase: args.supabase,
+          userId: args.userId,
+          clientId: client.id,
+          campaignId: campaign.id,
+          channel: args.channel,
+          subject: null,
+          body,
+          to,
+          result,
+        });
+      } catch (err) {
+        failed += 1;
+        const errMsg = err instanceof Error ? err.message : String(err);
+        await recordMessage({
+          supabase: args.supabase,
+          userId: args.userId,
+          clientId: client.id,
+          campaignId: campaign.id,
+          channel: args.channel,
+          subject: null,
+          body,
+          to,
+          result: {
+            ok: false,
+            status: "failed",
+            provider: "none",
+            error: errMsg,
+          },
+        });
+      }
+    }
   }
 
   const finalStatus =

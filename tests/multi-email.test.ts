@@ -54,4 +54,32 @@ describe("Multi-Email Utilities", () => {
     assert.equal(isValidSingleEmail("invalid-email"), false);
     assert.deepEqual(getInvalidEmails("valid@domain.com, bad-email, another@domain.com"), ["bad-email"]);
   });
+
+  it("resolves all unique valid email addresses for bulk send across multi-email and single-email clients", () => {
+    const dinesh = {
+      name: "Dinesh",
+      email: "dineshwedd@gmail.com, dkvedbusiness@gmail.com, palakpaneer911@gmail.com, dineshwedd@gmail.com",
+    };
+    const faizan = {
+      name: "Faizan",
+      email: "faizan@example.com",
+    };
+
+    const dineshRecipients = parseClientEmails(dinesh.email);
+    const faizanRecipients = parseClientEmails(faizan.email);
+
+    // Dinesh has 3 unique valid emails (duplicate dineshwedd@gmail.com removed)
+    assert.deepEqual(dineshRecipients, [
+      "dineshwedd@gmail.com",
+      "dkvedbusiness@gmail.com",
+      "palakpaneer911@gmail.com",
+    ]);
+
+    // Single-email client Faizan resolves to 1 email
+    assert.deepEqual(faizanRecipients, ["faizan@example.com"]);
+
+    // Total bulk emails dispatched across both clients = 4 unique email sends
+    const allDispatched = [...dineshRecipients, ...faizanRecipients];
+    assert.equal(allDispatched.length, 4);
+  });
 });
