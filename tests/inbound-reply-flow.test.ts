@@ -221,6 +221,77 @@ describe("Inbound Gmail Reply Flow & Threading Tests", () => {
 
     assert.equal(matchedClientId2, null, "Message NOT from client email must NOT match client_id");
   });
+
+  it("Test 11: New inbound reply syncing & multi-tier matching verification", () => {
+    const clients = [
+      { id: "client-yash", email: "theyashyadavvv@gmail.com" },
+    ];
+    const emailToClient: Record<string, string> = { "theyashyadavvv@gmail.com": "client-yash" };
+    const threadToClient: Record<string, string> = {};
+    const myEmail = "connected@company.com";
+
+    const parseEmail = (val?: string) => {
+      if (!val) return "";
+      const match = val.match(/<([^>]+)>/);
+      return (match && match[1] ? match[1] : val).trim().toLowerCase();
+    };
+
+    // Step 1: Outbound message sent to Yash establishes threadToClient mapping
+    const outboundMsg = {
+      id: "msg-outbound-1",
+      threadId: "thread-yash-100",
+      from: "Company Team <connected@company.com>",
+      to: "Yash Yadav <theyashyadavvv@gmail.com>",
+    };
+
+    const outboundFrom = parseEmail(outboundMsg.from);
+    if (outboundFrom === myEmail) {
+      const outboundTo = parseEmail(outboundMsg.to);
+      if (emailToClient[outboundTo]) {
+        threadToClient[outboundMsg.threadId] = emailToClient[outboundTo];
+      }
+    }
+
+    assert.equal(threadToClient["thread-yash-100"], "client-yash", "Outbound send must associate thread with client-yash");
+
+    // Step 2: New inbound reply arrives from Yash in thread-yash-100
+    const inboundReply = {
+      id: "msg-inbound-2",
+      threadId: "thread-yash-100",
+      from: "Yash Yadav <theyashyadavvv@gmail.com>",
+      to: "Company Team <connected@company.com>",
+    };
+
+    const inboundFrom = parseEmail(inboundReply.from);
+    let matchedId: string | null = null;
+
+    if (inboundFrom && emailToClient[inboundFrom]) {
+      matchedId = emailToClient[inboundFrom] || null;
+    } else if (inboundReply.threadId && threadToClient[inboundReply.threadId]) {
+      matchedId = threadToClient[inboundReply.threadId] || null;
+    }
+
+    assert.equal(matchedId, "client-yash", "New inbound reply from Yash must be matched to client-yash");
+
+    // Step 3: Inbound reply from alternate address in same thread falls back to Thread ID
+    const altReply = {
+      id: "msg-inbound-3",
+      threadId: "thread-yash-100",
+      from: "Yash Secondary <yash.alt@gmail.com>",
+      to: "Company Team <connected@company.com>",
+    };
+
+    const altFrom = parseEmail(altReply.from);
+    let altMatchedId: string | null = null;
+
+    if (altFrom && emailToClient[altFrom]) {
+      altMatchedId = emailToClient[altFrom] || null;
+    } else if (altReply.threadId && threadToClient[altReply.threadId]) {
+      altMatchedId = threadToClient[altReply.threadId] || null;
+    }
+
+    assert.equal(altMatchedId, "client-yash", "Inbound reply in known thread must match client via Thread ID fallback");
+  });
 });
 
 

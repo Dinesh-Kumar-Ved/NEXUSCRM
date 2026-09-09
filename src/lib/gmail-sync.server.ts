@@ -343,8 +343,8 @@ export async function syncGmailForWorkspace(workspaceId: string): Promise<GmailS
   console.log(`[GMAIL_DEBUG] CONNECTED_GMAIL_ACCOUNT=${myEmail}`);
   console.log(`[GMAIL_SYNC] Syncing for workspace=${workspaceId}, connected Gmail account=${myEmail}`);
 
-  // 1. Fetch recent 50 messages from mailbox
-  const mailboxMsgIds = await listMessageIds(accessToken, "", 50);
+  // 1. Fetch recent 100 messages from mailbox
+  const mailboxMsgIds = await listMessageIds(accessToken, "", 100);
 
   const supabase = supabaseAdmin;
 
@@ -393,7 +393,7 @@ export async function syncGmailForWorkspace(workspaceId: string): Promise<GmailS
 
   const threadToClient: Record<string, string> = {};
   threadRows?.forEach((row: { thread_id: string; client_id: string }) => {
-    if (row.thread_id && row.client_id) {
+    if (row.thread_id && row.client_id && !row.thread_id.startsWith("tombstone_")) {
       threadToClient[row.thread_id] = row.client_id;
     }
   });
@@ -401,7 +401,11 @@ export async function syncGmailForWorkspace(workspaceId: string): Promise<GmailS
   // 2. Fetch messages from active threads in email_messages
   const activeThreadIds = new Set<string>();
   threadRows?.forEach((row: { thread_id: string }) => {
-    if (row.thread_id && !row.thread_id.startsWith("thread_")) {
+    if (
+      row.thread_id &&
+      !row.thread_id.startsWith("thread_") &&
+      !row.thread_id.startsWith("tombstone_")
+    ) {
       activeThreadIds.add(row.thread_id);
     }
   });
@@ -467,18 +471,62 @@ export async function syncGmailForWorkspace(workspaceId: string): Promise<GmailS
       const fromEmail = parseEmail(fromHeader);
       const toEmail = parseEmail(toHeader);
 
-      // Determine client matching and direction
       let matchedClientId: string | null = null;
-      const direction: "inbound" = "inbound";
 
-      // Strict INBOUND check: fromEmail or Reply-To must belong to a client.
+      // Tier 1: Check From header email against known client emails
       if (fromEmail && emailToClient[fromEmail]) {
-        matchedClientId = emailToClient[fromEmail];
-      } else {
-        const replyToEmail = parseEmail(getHeader("Reply-To"));
-        if (replyToEmail && emailToClient[replyToEmail]) {
-          matchedClientId = emailToClient[replyToEmail];
+        matchedClientId = emailToClient[fromEmail] || null;
+      }
+
+      // Tier 1b: Check all emails parsed from From header
+      if (!matchedClientId && fromHeader) {
+        for (const email of parseClientEmails(fromHeader)) {
+          const foundId = emailToClient[email.toLowerCase()];
+          if (foundId) {
+            matchedClientId = foundId;
+            break;
+          }
         }
+      }
+
+      // Tier 2: Check Reply-To header
+      if (!matchedClientId) {
+        const replyToHeader = getHeader("Reply-To");
+        const replyToEmail = parseEmail(replyToHeader);
+        if (replyToEmail && emailToClient[replyToEmail]) {
+          matchedClientId = emailToClient[replyToEmail] || null;
+        } else if (replyToHeader) {
+          for (const email of parseClientEmails(replyToHeader)) {
+            const foundId = emailToClient[email.toLowerCase()];
+            if (foundId) {
+              matchedClientId = foundId;
+              break;
+            }
+          }
+        }
+      }
+
+      // Tier 3: Fallback to thread-to-client mapping if message is in an existing thread
+      if (!matchedClientId && msg.threadId && threadToClient[msg.threadId]) {
+        matchedClientId = threadToClient[msg.threadId] || null;
+      }
+
+      // If message is outbound (from connected Gmail account), map thread to client and skip inserting as inbound
+      if (fromEmail && (fromEmail === myEmail || fromEmail.toLowerCase() === myEmail)) {
+        if (!matchedClientId && toHeader) {
+          for (const email of parseClientEmails(toHeader)) {
+            const foundId = emailToClient[email.toLowerCase()];
+            if (foundId) {
+              matchedClientId = foundId;
+              break;
+            }
+          }
+        }
+        if (matchedClientId && msg.threadId) {
+          threadToClient[msg.threadId] = matchedClientId;
+        }
+        // Do not insert outbound sent messages in sync
+        continue;
       }
 
       // Log the match result for EVERY message
