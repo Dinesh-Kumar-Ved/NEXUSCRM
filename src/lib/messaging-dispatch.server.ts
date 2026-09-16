@@ -323,7 +323,7 @@ export async function deliverToClient(
       if (args.channel === "email" && result.ok && client.workspace_id) {
         const now = new Date();
         const messageId = result.providerMessageId ?? `outbound_${Date.now()}`;
-        const threadId = (result as any).threadId ?? messageId;
+        const threadId = args.threadId ?? (result as any).threadId ?? messageId;
 
         const processedAttachments: Array<{
           filename: string;
@@ -373,7 +373,7 @@ export async function deliverToClient(
               client_id: client.id,
               thread_id: threadId,
               provider_message_id: messageId,
-              rfc_message_id: "",
+              rfc_message_id: messageId,
               direction: "outbound",
               from_email: "me",
               from_name: "You",

@@ -88,3 +88,30 @@ export function getInvalidEmails(emailInput: string | null | undefined): string[
   const parts = emailInput.split(/[,;\n\r]+/).map((p) => p.trim()).filter(Boolean);
   return parts.filter((p) => !isValidSingleEmail(p));
 }
+
+/**
+ * Normalizes an email subject line by stripping leading Re:, RE:, Fwd:, FWD:, etc.
+ * and lowercasing for subject-fallback threading matching.
+ */
+export function normalizeSubject(subject: string | null | undefined): string {
+  if (!subject || typeof subject !== "string") return "";
+  let s = subject.trim();
+  while (/^(re|fwd|fw|reply):\s*/i.test(s)) {
+    s = s.replace(/^(re|fwd|fw|reply):\s*/i, "").trim();
+  }
+  return s.toLowerCase();
+}
+
+/**
+ * Extracts and cleans RFC 2822 Message-IDs from header strings (e.g., In-Reply-To or References).
+ * Returns array of cleaned Message-ID strings like ["<id1@hostinger.com>", "<id2@hostinger.com>"].
+ */
+export function extractMessageIds(headerVal: string | null | undefined): string[] {
+  if (!headerVal || typeof headerVal !== "string") return [];
+  const matches = headerVal.match(/<[^>]+>/g);
+  if (matches && matches.length > 0) {
+    return matches.map((m) => m.trim());
+  }
+  return headerVal.split(/\s+/).map((s) => s.trim()).filter(Boolean);
+}
+

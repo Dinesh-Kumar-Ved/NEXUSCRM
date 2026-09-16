@@ -6,7 +6,7 @@
 
 import { ImapFlow } from "imapflow";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { parseClientEmails } from "./email-utils";
+import { extractMessageIds, normalizeSubject, parseClientEmails } from "./email-utils";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 
@@ -388,18 +388,41 @@ export async function syncImapForWorkspace(workspaceId: string): Promise<ImapSyn
   );
 
   // ------------------------------------------------------------------
-  // 5. Load thread-to-client associations for Tier 3 matching
+  // 5. Load thread-to-client and message-to-thread maps for threading
   // ------------------------------------------------------------------
-  const { data: threadRows } = await (supabase as unknown as any)
+  const { data: existingMsgRows } = await (supabase as unknown as any)
     .from("email_messages")
-    .select("thread_id, client_id")
-    .eq("workspace_id", workspaceId)
-    .not("client_id", "is", null);
+    .select("rfc_message_id, provider_message_id, thread_id, client_id, subject")
+    .eq("workspace_id", workspaceId);
 
   const threadToClient: Record<string, string> = {};
-  threadRows?.forEach((row: { thread_id: string; client_id: string }) => {
-    if (row.thread_id && row.client_id && !row.thread_id.startsWith("tombstone_")) {
-      threadToClient[row.thread_id] = row.client_id;
+  const messageToThread = new Map<string, string>();
+  const subjectToThread = new Map<string, string>();
+
+  existingMsgRows?.forEach((row: {
+    rfc_message_id?: string | null;
+    provider_message_id?: string | null;
+    thread_id?: string | null;
+    client_id?: string | null;
+    subject?: string | null;
+  }) => {
+    if (row.thread_id && !row.thread_id.startsWith("tombstone_")) {
+      const tid = row.thread_id.trim();
+      if (row.client_id) {
+        threadToClient[tid] = row.client_id;
+      }
+      if (row.rfc_message_id && row.rfc_message_id !== "DELETED" && row.rfc_message_id !== "DELETE_ALL_MARKER") {
+        messageToThread.set(row.rfc_message_id.trim(), tid);
+      }
+      if (row.provider_message_id) {
+        messageToThread.set(row.provider_message_id.trim(), tid);
+      }
+      if (row.subject) {
+        const normSub = normalizeSubject(row.subject);
+        if (normSub && !subjectToThread.has(normSub)) {
+          subjectToThread.set(normSub, tid);
+        }
+      }
     }
   });
 
@@ -595,13 +618,54 @@ export async function syncImapForWorkspace(workspaceId: string): Promise<ImapSyn
 
         // ------------------------------------------------------------------
         // Determine thread ID for grouping replies in the UI.
-        // Priority: In-Reply-To → RFC Message-ID → providerMessageId
+        // Priority:
+        // 1. Header Resolution: In-Reply-To & References matched against DB/in-memory messageToThread map
+        // 2. Root Header Fallback: root Message-ID (1st in References) or In-Reply-To
+        // 3. Subject Fallback: normalized subject matched against subjectToThread map
+        // 4. Ultimate Fallback: own RFC Message-ID or providerMessageId
         // ------------------------------------------------------------------
-        const threadId = (inReplyTo?.trim()) || (rfcMessageId?.trim()) || providerMessageId;
+        const inReplyToIds = extractMessageIds(inReplyTo);
+        const referencesIds = extractMessageIds(references);
+        const allReferencedIds = [...inReplyToIds, ...referencesIds];
 
-        // Register thread→client so subsequent messages in this thread match
+        let resolvedThreadId: string | null = null;
+
+        // 1. Check if any referenced Message-ID maps to an existing thread
+        for (const refId of allReferencedIds) {
+          if (messageToThread.has(refId)) {
+            resolvedThreadId = messageToThread.get(refId)!;
+            break;
+          }
+        }
+
+        // 2. Root header fallback if no DB match found yet
+        if (!resolvedThreadId) {
+          if (referencesIds.length > 0) {
+            resolvedThreadId = referencesIds[0]!;
+          } else if (inReplyToIds.length > 0) {
+            resolvedThreadId = inReplyToIds[0]!;
+          }
+        }
+
+        // 3. Normalized subject fallback
+        const normSub = normalizeSubject(subject);
+        if (!resolvedThreadId && normSub && subjectToThread.has(normSub)) {
+          resolvedThreadId = subjectToThread.get(normSub)!;
+        }
+
+        // 4. Ultimate fallback
+        const threadId = resolvedThreadId || (rfcMessageId?.trim()) || providerMessageId;
+
+        // Register in in-memory lookup maps for subsequent messages
         threadToClient[threadId] = matchedClientId;
-        if (rfcMessageId?.trim()) threadToClient[rfcMessageId.trim()] = matchedClientId;
+        if (rfcMessageId?.trim()) {
+          threadToClient[rfcMessageId.trim()] = matchedClientId;
+          messageToThread.set(rfcMessageId.trim(), threadId);
+        }
+        messageToThread.set(providerMessageId, threadId);
+        if (normSub && !subjectToThread.has(normSub)) {
+          subjectToThread.set(normSub, threadId);
+        }
 
         // ------------------------------------------------------------------
         // Parse body from raw RFC 2822 source

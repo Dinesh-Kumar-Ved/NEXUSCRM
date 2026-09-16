@@ -127,7 +127,6 @@ export const getClientEmailThreads = createServerFn({ method: "GET" })
       .select("*")
       .eq("workspace_id", data.workspaceId)
       .eq("client_id", data.clientId)
-      .eq("direction", "inbound")
       .order("received_at", { ascending: true, nullsFirst: false });
 
     if (error) {
@@ -178,12 +177,15 @@ export const getClientEmailThreads = createServerFn({ method: "GET" })
       });
     }
 
+    // Display only client/inbound conversations in the view list
+    const inboundThreads = threads.filter((t) => t.inboundCount > 0);
+
     // Sort threads so the one with the newest message is first
-    threads.sort(
+    inboundThreads.sort(
       (a, b) => new Date(b.latestTimestamp).getTime() - new Date(a.latestTimestamp).getTime(),
     );
 
-    return threads;
+    return inboundThreads;
   });
 
 /**
@@ -244,31 +246,81 @@ export const sendEmailThreadReply = createServerFn({ method: "POST" })
       throw new Error("Client does not have a valid email address.");
     }
 
-    // Get Gmail Access Token
-    const accessToken = await getAccessTokenForWorkspace(data.workspaceId);
-    const profile = await fetchGmailProfile(accessToken);
-    const fromEmail = profile.emailAddress;
+    // Check workspace integration provider (gmail vs smtp)
+    const { data: integration } = await (supabaseAdmin as any)
+      .from("workspace_integrations")
+      .select("provider, config, details")
+      .eq("workspace_id", data.workspaceId)
+      .eq("provider_type", "email")
+      .eq("is_active", true)
+      .maybeSingle();
 
-    // Send message via Gmail REST API
-    const sendResult = await sendGmailMessage({
-      accessToken,
-      from: fromEmail,
-      to: toEmail,
-      subject: data.subject,
-      text: data.body,
-      html: data.html || `<p>${data.body.replace(/\n/g, "<br/>")}</p>`,
-      threadId: data.threadId,
-      inReplyTo: data.inReplyTo,
-      references: data.references,
-      attachments: data.attachments?.map((a) => ({
-        filename: a.filename,
-        mimeType: a.mimeType,
-        contentBase64: a.contentBase64,
-      })),
-    });
+    const provider = integration?.provider ?? "gmail";
+    let fromEmail = "";
+    let fromName = "You";
+    let sendResult: { ok: boolean; messageId?: string | undefined; error?: string | undefined };
 
-    if (!sendResult.ok) {
-      throw new Error(sendResult.error || "Failed to send Gmail reply.");
+    if (provider === "gmail") {
+      const accessToken = await getAccessTokenForWorkspace(data.workspaceId);
+      const profile = await fetchGmailProfile(accessToken);
+      fromEmail = profile.emailAddress;
+      fromName = profile.emailAddress.split("@")[0] || "You";
+
+      sendResult = await sendGmailMessage({
+        accessToken,
+        from: fromEmail,
+        to: toEmail,
+        subject: data.subject,
+        text: data.body,
+        html: data.html || `<p>${data.body.replace(/\n/g, "<br/>")}</p>`,
+        threadId: data.threadId,
+        inReplyTo: data.inReplyTo,
+        references: data.references,
+        attachments: data.attachments?.map((a) => ({
+          filename: a.filename,
+          mimeType: a.mimeType,
+          contentBase64: a.contentBase64,
+        })),
+      });
+
+      if (!sendResult.ok) {
+        throw new Error(sendResult.error || "Failed to send Gmail reply.");
+      }
+    } else {
+      // SMTP / Hostinger workspace dispatch
+      const { sendEmailWithConfig } = await import("./integrations.server");
+      const config = (integration?.config ?? {}) as Record<string, any>;
+      const details = (integration?.details ?? {}) as Record<string, any>;
+
+      fromEmail =
+        details["fromEmail"] ||
+        config["fromEmail"] ||
+        config["smtpUser"] ||
+        "me";
+      fromName = details["fromName"] || config["fromName"] || fromEmail.split("@")[0] || "You";
+
+      const emailConfig = {
+        ...config,
+        fromEmail,
+        fromName,
+        workspaceId: data.workspaceId,
+      };
+
+      sendResult = await sendEmailWithConfig({
+        config: emailConfig as any,
+        to: toEmail,
+        subject: data.subject,
+        text: data.body,
+        html: data.html || `<p>${data.body.replace(/\n/g, "<br/>")}</p>`,
+        attachments: data.attachments,
+        threadId: data.threadId,
+        inReplyTo: data.inReplyTo,
+        references: data.references,
+      });
+
+      if (!sendResult.ok) {
+        throw new Error(sendResult.error || "Failed to send email reply via SMTP.");
+      }
     }
 
     const messageId = sendResult.messageId ?? `reply_${Date.now()}`;
@@ -318,10 +370,10 @@ export const sendEmailThreadReply = createServerFn({ method: "POST" })
         client_id: data.clientId,
         thread_id: data.threadId,
         provider_message_id: sendResult.messageId ?? messageId,
-        rfc_message_id: "",
+        rfc_message_id: sendResult.messageId ?? messageId,
         direction: "outbound",
         from_email: fromEmail,
-        from_name: profile.emailAddress.split("@")[0] || "You",
+        from_name: fromName,
         to_email: toEmail,
         subject: data.subject,
         body_text: data.body,

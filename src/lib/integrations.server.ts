@@ -532,6 +532,8 @@ export async function sendEmailWithConfig(params: {
         subject,
         text,
         html,
+        inReplyTo: params.inReplyTo || undefined,
+        references: params.references || undefined,
         attachments:
           params.attachments && params.attachments.length > 0
             ? params.attachments.map((a) => ({
