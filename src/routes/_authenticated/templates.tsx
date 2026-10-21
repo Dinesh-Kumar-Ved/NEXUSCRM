@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { useAuth } from "@/hooks/use-auth";
+import { useAuth, useWorkspace } from "@/hooks/use-auth";
 import { supabase } from "@/integrations/supabase/client";
 import { PERSONALIZATION_TOKENS, personalize, type Channel } from "@/lib/crm";
 
@@ -37,6 +37,7 @@ export const Route = createFileRoute("/_authenticated/templates")({
 
 type Template = {
   id: string;
+  workspace_id?: string | null;
   name: string;
   channel: "email" | "sms" | "whatsapp" | "call";
   subject: string | null;
@@ -46,17 +47,22 @@ type Template = {
 
 export function TemplatesPage() {
   const { user } = useAuth();
+  const { data: workspace, isLoading: isWorkspaceLoading } = useWorkspace(user?.id);
+  const workspaceId = workspace?.workspace_id ?? null;
   const queryClient = useQueryClient();
   const [selectedChannel, setSelectedChannel] = useState<string>("all");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
 
   const templatesQuery = useQuery({
-    queryKey: ["templates"],
+    queryKey: ["templates", workspaceId],
+    enabled: Boolean(workspaceId),
     queryFn: async () => {
+      if (!workspaceId) return [];
       const { data, error } = await supabase
         .from("templates")
         .select("*")
+        .eq("workspace_id", workspaceId)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as Template[];
@@ -65,14 +71,19 @@ export function TemplatesPage() {
 
   const deleteTemplate = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from("templates").delete().eq("id", id);
-      if (error) throw error;
+      if (!workspaceId) throw new Error("Workspace is required to delete a template.");
+      const { error } = await supabase
+        .from("templates")
+        .delete()
+        .eq("id", id)
+        .eq("workspace_id", workspaceId);
+      if (error) throw new Error(error.message || "Failed to delete template");
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["templates"] });
+      void queryClient.invalidateQueries({ queryKey: ["templates", workspaceId] });
       toast.success("Template deleted");
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to delete template"),
   });
 
   const templates = (templatesQuery.data ?? []).filter(
@@ -109,7 +120,7 @@ export function TemplatesPage() {
         </Tabs>
       </div>
 
-      {templatesQuery.isLoading ? (
+      {templatesQuery.isLoading || isWorkspaceLoading ? (
         <p className="text-sm text-muted-foreground">Loading templates...</p>
       ) : templatesQuery.isError ? (
         <Card>
@@ -196,7 +207,8 @@ export function TemplatesPage() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         template={editingTemplate}
-        onSaved={() => void queryClient.invalidateQueries({ queryKey: ["templates"] })}
+        workspaceId={workspaceId}
+        onSaved={() => void queryClient.invalidateQueries({ queryKey: ["templates", workspaceId] })}
       />
     </div>
   );
@@ -206,11 +218,13 @@ function TemplateDialog({
   open,
   onOpenChange,
   template,
+  workspaceId,
   onSaved,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   template: Template | null;
+  workspaceId: string | null;
   onSaved: () => void;
 }) {
   const { user } = useAuth();
@@ -243,6 +257,10 @@ function TemplateDialog({
       toast.error("Name and message body are required.");
       return;
     }
+    if (!workspaceId) {
+      toast.error("Active workspace not loaded. Please try again.");
+      return;
+    }
     setSaving(true);
     try {
       if (template) {
@@ -254,24 +272,32 @@ function TemplateDialog({
             subject: channel === "email" ? subject.trim() || null : null,
             body: body.trim(),
           })
-          .eq("id", template.id);
-        if (error) throw error;
+          .eq("id", template.id)
+          .eq("workspace_id", workspaceId);
+        if (error) throw new Error(error.message || "Failed to update template");
         toast.success("Template updated");
       } else {
         const { error } = await supabase.from("templates").insert({
+          workspace_id: workspaceId,
           name: name.trim(),
           channel,
           subject: channel === "email" ? subject.trim() || null : null,
           body: body.trim(),
           created_by: user?.id ?? null,
         });
-        if (error) throw error;
+        if (error) throw new Error(error.message || "Failed to create template");
         toast.success("Template created");
       }
       onSaved();
       onOpenChange(false);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save template");
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : typeof err === "object" && err !== null && "message" in err
+            ? String((err as { message: unknown }).message)
+            : "Failed to save template";
+      toast.error(message);
     } finally {
       setSaving(false);
     }
