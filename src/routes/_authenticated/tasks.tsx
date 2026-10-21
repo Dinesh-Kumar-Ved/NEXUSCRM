@@ -47,7 +47,9 @@ export const Route = createFileRoute("/_authenticated/tasks")({
 
 type TaskItem = {
   id: string;
+  workspace_id?: string | null;
   client_id: string | null;
+  created_by?: string | null;
   title: string;
   notes: string | null;
   due_at: string | null;
@@ -58,7 +60,7 @@ type TaskItem = {
 
 export function TasksPage() {
   const { user } = useAuth();
-  const { data: workspace } = useWorkspace(user?.id);
+  const { data: workspace, isLoading: isWorkspaceLoading } = useWorkspace(user?.id);
   const workspaceId = workspace?.workspace_id ?? null;
   const queryClient = useQueryClient();
 
@@ -91,6 +93,15 @@ export function TasksPage() {
     [clientsQuery.data],
   );
 
+  const workspaceClientIds = useMemo(
+    () => new Set((clientsQuery.data ?? []).map((c) => c.id)),
+    [clientsQuery.data],
+  );
+  const workspaceMemberIds = useMemo(
+    () => new Set((team ?? []).map((m) => m.id)),
+    [team],
+  );
+
   const tasksQuery = useQuery({
     queryKey: ["all-tasks"],
     queryFn: async () => {
@@ -103,34 +114,50 @@ export function TasksPage() {
     },
   });
 
+  const workspaceTasks = useMemo(() => {
+    const raw = tasksQuery.data ?? [];
+    if (!workspaceId) return [];
+    return raw.filter((task) => {
+      if (task.workspace_id) return task.workspace_id === workspaceId;
+      if (task.client_id) return workspaceClientIds.has(task.client_id);
+      if (task.created_by) return workspaceMemberIds.has(task.created_by) || task.created_by === user?.id;
+      if (task.assigned_to) return workspaceMemberIds.has(task.assigned_to);
+      return false;
+    });
+  }, [tasksQuery.data, workspaceId, workspaceClientIds, workspaceMemberIds, user?.id]);
+
   const toggleTask = useMutation({
     mutationFn: async ({ id, completed }: { id: string; completed: boolean }) => {
+      const target = workspaceTasks.find((t) => t.id === id);
+      if (!target) throw new Error("Task not found in this workspace.");
       const { error } = await supabase.from("tasks").update({ completed }).eq("id", id);
-      if (error) throw error;
+      if (error) throw new Error(error.message || "Failed to update task");
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["all-tasks"] });
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to update task"),
   });
 
   const deleteTask = useMutation({
     mutationFn: async (id: string) => {
+      const target = workspaceTasks.find((t) => t.id === id);
+      if (!target) throw new Error("Task not found in this workspace.");
       const { error } = await supabase.from("tasks").delete().eq("id", id);
-      if (error) throw error;
+      if (error) throw new Error(error.message || "Failed to delete task");
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["all-tasks"] });
       toast.success("Task removed");
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to delete task"),
   });
 
   const now = new Date();
 
   const filteredTasks = useMemo(() => {
-    const list = tasksQuery.data ?? [];
+    const list = workspaceTasks;
     const todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
 
@@ -149,9 +176,23 @@ export function TasksPage() {
     }
     // "open"
     return list.filter((t) => !t.completed);
-  }, [tasksQuery.data, tab]);
+  }, [workspaceTasks, tab]);
 
-  const tasks = tasksQuery.data ?? [];
+  const tasks = workspaceTasks;
+  const todayEnd = useMemo(() => {
+    const d = new Date();
+    d.setHours(23, 59, 59, 999);
+    return d;
+  }, []);
+
+  const openCount = tasks.filter((t) => !t.completed).length;
+  const dueTodayCount = tasks.filter(
+    (t) => !t.completed && t.due_at && new Date(t.due_at).getTime() <= todayEnd.getTime(),
+  ).length;
+  const upcomingCount = tasks.filter(
+    (t) => !t.completed && (!t.due_at || new Date(t.due_at).getTime() > todayEnd.getTime()),
+  ).length;
+  const completedCount = tasks.filter((t) => t.completed).length;
 
   return (
     <div className="space-y-6">
@@ -171,12 +212,16 @@ export function TasksPage() {
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
             <TabsTrigger value="open">
-              Open ({tasks.filter((t) => !t.completed).length})
+              Open ({openCount})
             </TabsTrigger>
-            <TabsTrigger value="due_today">Due Today / Overdue</TabsTrigger>
-            <TabsTrigger value="upcoming">Upcoming</TabsTrigger>
+            <TabsTrigger value="due_today">
+              Due Today / Overdue ({dueTodayCount})
+            </TabsTrigger>
+            <TabsTrigger value="upcoming">
+              Upcoming ({upcomingCount})
+            </TabsTrigger>
             <TabsTrigger value="completed">
-              Completed ({tasks.filter((t) => t.completed).length})
+              Completed ({completedCount})
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -184,7 +229,7 @@ export function TasksPage() {
 
       <Card>
         <CardContent className="p-0">
-          {tasksQuery.isLoading ? (
+          {tasksQuery.isLoading || isWorkspaceLoading ? (
             <div className="p-8 text-center text-sm text-muted-foreground">Loading tasks...</div>
           ) : tasksQuery.isError ? (
             <div className="p-8 text-center text-sm text-destructive">
@@ -311,7 +356,8 @@ export function TasksPage() {
        />
        {taskToEdit && (
          <EditTaskModal
-           open={editDialogOpen}
+          workspaceId={workspaceId}
+          open={editDialogOpen}
            onOpenChange={(open) => {
              setEditDialogOpen(open);
              if (!open) setTaskToEdit(null);
@@ -332,6 +378,7 @@ export function TasksPage() {
 function EditTaskModal({
   open,
   onOpenChange,
+  workspaceId,
   task,
   clients,
   team,
@@ -339,6 +386,7 @@ function EditTaskModal({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  workspaceId?: string | null;
   task: TaskItem;
   clients: ClientRecord[];
   team: Array<{ id: string; full_name: string | null; email: string | null }>;
@@ -355,6 +403,10 @@ function EditTaskModal({
     e.preventDefault();
     if (!title.trim()) {
       toast.error("Task title is required");
+      return;
+    }
+    if (!workspaceId) {
+      toast.error("Workspace is required to update a task");
       return;
     }
     setSaving(true);
@@ -474,6 +526,10 @@ function CreateTaskModal({
     e.preventDefault();
     if (!title.trim()) {
       toast.error("Task title is required");
+      return;
+    }
+    if (!workspaceId) {
+      toast.error("Workspace is required to create a task");
       return;
     }
     setSaving(true);

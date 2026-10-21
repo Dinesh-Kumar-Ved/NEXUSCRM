@@ -188,8 +188,10 @@ function ClientDetailsPage() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["client-tasks", clientId] });
+      void queryClient.invalidateQueries({ queryKey: ["all-tasks"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
     },
-    onError: (err) => toast.error(err.message),
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Failed to update task"),
   });
 
   const assignedMember = (team ?? []).find((member) => member.id === clientQuery.data?.assigned_to);
@@ -568,6 +570,8 @@ function ClientDetailsPage() {
         workspaceId={workspaceId}
         onCreated={() => {
           void queryClient.invalidateQueries({ queryKey: ["client-tasks", clientId] });
+          void queryClient.invalidateQueries({ queryKey: ["all-tasks"] });
+          void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
         }}
       />
       <EditTaskDialog
@@ -578,6 +582,8 @@ function ClientDetailsPage() {
         workspaceId={workspaceId}
         onUpdated={() => {
           void queryClient.invalidateQueries({ queryKey: ["client-tasks", clientId] });
+          void queryClient.invalidateQueries({ queryKey: ["all-tasks"] });
+          void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
         }}
       />
     </div>
@@ -619,6 +625,10 @@ function EditTaskDialog({
     e.preventDefault();
     if (!title.trim()) {
       toast.error("Task title is required.");
+      return;
+    }
+    if (!workspaceId) {
+      toast.error("Workspace is required to update a task.");
       return;
     }
     setSaving(true);
@@ -710,6 +720,7 @@ function CreateTaskDialog({
   workspaceId: string | null;
   onCreated: () => void;
 }) {
+  const { user } = useAuth();
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -723,6 +734,10 @@ function CreateTaskDialog({
       toast.error("Task title is required.");
       return;
     }
+    if (!workspaceId) {
+      toast.error("Workspace is required to create a task.");
+      return;
+    }
     setSaving(true);
     try {
       const { error } = await supabase.from("tasks").insert({
@@ -731,6 +746,7 @@ function CreateTaskDialog({
         notes: notes.trim() || null,
         due_at: dueDate ? new Date(dueDate).toISOString() : null,
         assigned_to: assignedTo === "unassigned" ? null : assignedTo,
+        created_by: user?.id ?? null,
       });
       if (error) throw error;
       toast.success("Task created");
